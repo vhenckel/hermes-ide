@@ -164,7 +164,7 @@ export class PluginRuntime {
 	getAllPanels(): (PluginPanelContribution & { pluginId: string })[] {
 		const result: (PluginPanelContribution & { pluginId: string })[] = [];
 		for (const [id, entry] of this.plugins) {
-			if (entry.status !== "active" && entry.status !== "registered") continue;
+			if (entry.status !== "active") continue;
 			for (const panel of entry.module.manifest.contributes.panels ?? []) {
 				result.push({ ...panel, pluginId: id });
 			}

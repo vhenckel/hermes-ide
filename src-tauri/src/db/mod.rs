@@ -2602,6 +2602,23 @@ pub fn set_plugin_enabled(
     Ok(())
 }
 
+/// Remove all database records for a plugin (plugins table + plugin_storage).
+/// Called during uninstall to prevent orphaned data.
+#[tauri::command]
+pub fn cleanup_plugin_data(
+    plugin_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    db.conn
+        .execute("DELETE FROM plugin_storage WHERE plugin_id = ?1", params![plugin_id])
+        .map_err(|e| e.to_string())?;
+    db.conn
+        .execute("DELETE FROM plugins WHERE id = ?1", params![plugin_id])
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 #[tauri::command]
 pub fn get_disabled_plugin_ids(
     state: State<'_, AppState>,

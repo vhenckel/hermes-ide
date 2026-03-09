@@ -574,7 +574,6 @@ const SessionContext = createContext<SessionContextValue | null>(null);
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(sessionReducer, initialState);
   const busyTimestamps = useRef<Map<string, number>>(new Map());
-  const nudgeTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const closingSessionIds = useRef<Set<string>>(new Set());
 
   // Long-running threshold: 30 seconds of busy before notification on idle
@@ -654,12 +653,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         // Clean up refs that track per-session state (prevent memory leaks)
         busyTimestamps.current.delete(event.payload);
         closingSessionIds.current.delete(event.payload);
-        // Clean up nudge timer if one exists for this session
-        const existingTimer = nudgeTimers.current.get(event.payload);
-        if (existingTimer) {
-          clearTimeout(existingTimer);
-          nudgeTimers.current.delete(event.payload);
-        }
         dispatch({ type: "SESSION_REMOVED", id: event.payload });
       });
       unlisteners.push(u2);
@@ -859,6 +852,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // Keep a ref to the latest state (avoids stale closures in timeouts and saveWorkspace)
+  const stateRef = useRef(state);
+
   const closeSession = useCallback(async (id: string) => {
     if (closingSessionIds.current.has(id)) return; // Prevent double-close race
     closingSessionIds.current.add(id);
@@ -871,10 +867,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       // handles removal; if it failed we allow retrying. Also force-remove
       // zombie sessions that the backend no longer tracks.
       closingSessionIds.current.delete(id);
-      // Give the backend event a moment to arrive, then force-remove if
-      // the session is still in the list (handles zombie/dead sessions).
+      // Give the backend event a moment to arrive, then force-remove only if
+      // the session is still in state (avoids double-dispatch with session-removed event).
       setTimeout(() => {
-        dispatch({ type: "SESSION_REMOVED", id });
+        if (stateRef.current.sessions[id]) {
+          dispatch({ type: "SESSION_REMOVED", id });
+        }
       }, 500);
     }
   }, [dispatch]);
@@ -897,8 +895,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     dispatch({ type: "SET_ACTIVE", id });
   }, []);
 
-  // Keep a ref to the latest state for saveWorkspace (avoids stale closures)
-  const stateRef = useRef(state);
+  // stateRef is declared above closeSession
   stateRef.current = state;
 
   const saveWorkspace = useCallback(async () => {

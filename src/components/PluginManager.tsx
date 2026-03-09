@@ -93,8 +93,8 @@ export function PluginManager({ runtime }: { runtime?: PluginRuntime }) {
 				try {
 					const manifest = JSON.parse(p.manifest_json) as PluginManifest;
 					entries.push({ manifest, dirName: p.dir_name, enabled: !disabledSet.has(manifest.id) });
-				} catch {
-					// Skip plugins with invalid manifests
+				} catch (err) {
+					console.warn(`[PluginManager] Invalid manifest for plugin "${p.dir_name}":`, err);
 				}
 			}
 			setInstalled(entries);
@@ -133,6 +133,12 @@ export function PluginManager({ runtime }: { runtime?: PluginRuntime }) {
 			}
 		} catch {
 			// Runtime cleanup is best-effort
+		}
+		// Clean up database records (plugin settings, enabled state)
+		try {
+			await invoke("cleanup_plugin_data", { pluginId });
+		} catch {
+			// DB cleanup is best-effort
 		}
 		setExpandedId(null);
 		await loadPlugins();
@@ -178,7 +184,7 @@ export function PluginManager({ runtime }: { runtime?: PluginRuntime }) {
 	const handleToggleEnabled = useCallback(async (pluginId: string, currentlyEnabled: boolean) => {
 		setTogglingId(pluginId);
 		try {
-			await invoke("set_plugin_enabled", { pluginId, enabled: !currentlyEnabled });
+			// Activate/deactivate runtime first — if it fails, don't persist to DB
 			if (runtime) {
 				if (currentlyEnabled) {
 					await runtime.deactivate(pluginId);
@@ -186,6 +192,7 @@ export function PluginManager({ runtime }: { runtime?: PluginRuntime }) {
 					await runtime.activate(pluginId);
 				}
 			}
+			await invoke("set_plugin_enabled", { pluginId, enabled: !currentlyEnabled });
 			setInstalled(prev => prev.map(p =>
 				p.manifest.id === pluginId ? { ...p, enabled: !currentlyEnabled } : p
 			));
