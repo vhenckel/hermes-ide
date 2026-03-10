@@ -138,7 +138,7 @@ function AppContent() {
     return runtime;
   });
 
-  const { commands: pluginCommands, panels: pluginPanels, statusBarItems: pluginStatusBarItems } = usePluginRuntime(pluginRuntime);
+  const { commands: pluginCommands, panels: pluginPanels, statusBarItems: pluginStatusBarItems, pluginsWithSettings } = usePluginRuntime(pluginRuntime);
 
   useEffect(() => {
     const loader = new PluginLoader(pluginRuntime);
@@ -645,6 +645,7 @@ function AppContent() {
             }
           }}
           pluginCommands={pluginCommands}
+          pluginsWithSettings={pluginsWithSettings}
           onPluginCommand={(commandId) => pluginRuntime.executeCommand(commandId)}
         />
       )}

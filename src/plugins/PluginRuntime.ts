@@ -200,12 +200,24 @@ export class PluginRuntime {
 
 	// ─── Query Methods ─────────────────────────────────────────
 
-	getAllCommands(): (PluginCommandContribution & { pluginId: string })[] {
-		const result: (PluginCommandContribution & { pluginId: string })[] = [];
+	getAllCommands(): (PluginCommandContribution & { pluginId: string; pluginName: string })[] {
+		const result: (PluginCommandContribution & { pluginId: string; pluginName: string })[] = [];
 		for (const [id, entry] of this.plugins) {
 			if (entry.status !== "active") continue;
+			const pluginName = entry.module.manifest.name;
 			for (const cmd of entry.module.manifest.contributes.commands ?? []) {
-				result.push({ ...cmd, pluginId: id });
+				result.push({ ...cmd, pluginId: id, pluginName });
+			}
+		}
+		return result;
+	}
+
+	getPluginsWithSettings(): { pluginId: string; pluginName: string }[] {
+		const result: { pluginId: string; pluginName: string }[] = [];
+		for (const [id, entry] of this.plugins) {
+			if (entry.status !== "active") continue;
+			if (entry.module.manifest.contributes.settings && Object.keys(entry.module.manifest.contributes.settings).length > 0) {
+				result.push({ pluginId: id, pluginName: entry.module.manifest.name });
 			}
 		}
 		return result;

@@ -21,7 +21,8 @@ interface CommandPaletteProps {
   onOpenShortcuts?: () => void;
   onToggleGit?: () => void;
   onToggleSearch?: () => void;
-  pluginCommands?: { command: string; title: string; category?: string; pluginId: string }[];
+  pluginCommands?: { command: string; title: string; category?: string; pluginId: string; pluginName: string }[];
+  pluginsWithSettings?: { pluginId: string; pluginName: string }[];
   onPluginCommand?: (commandId: string) => void;
 }
 
@@ -35,7 +36,7 @@ interface Command {
 }
 
 export function CommandPalette({
-  onClose, sessions, onSelectSession, onNewSession, onToggleContext, onToggleSessions, onOpenSettings, onOpenWorkspace, onOpenCostDashboard, onToggleFlowMode, onAttachProject, onScanCwd, onOpenComposer, onOpenShortcuts, onToggleGit, onToggleSearch, pluginCommands, onPluginCommand,
+  onClose, sessions, onSelectSession, onNewSession, onToggleContext, onToggleSessions, onOpenSettings, onOpenWorkspace, onOpenCostDashboard, onToggleFlowMode, onAttachProject, onScanCwd, onOpenComposer, onOpenShortcuts, onToggleGit, onToggleSearch, pluginCommands, pluginsWithSettings, onPluginCommand,
 }: CommandPaletteProps) {
   const [query, setQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -54,6 +55,14 @@ export function CommandPalette({
     { id: "settings-git", label: "Settings / Git", category: "Settings", hidden: true, action: () => { onOpenSettings("git"); onClose(); } },
     { id: "settings-privacy", label: "Settings / Privacy", category: "Settings", hidden: true, action: () => { onOpenSettings("privacy"); onClose(); } },
         { id: "settings-shortcuts", label: "Settings / Shortcuts", category: "Settings", hidden: true, action: () => { onOpenSettings("shortcuts"); onClose(); } },
+    { id: "settings-plugins", label: "Settings / Plugins", category: "Settings", hidden: true, action: () => { onOpenSettings("plugins"); onClose(); } },
+    ...(pluginsWithSettings ?? []).map(p => ({
+      id: `settings-plugin-${p.pluginId}`,
+      label: `Settings / ${p.pluginName}`,
+      category: "Plugin Settings",
+      hidden: true,
+      action: () => { onOpenSettings("plugins"); onClose(); },
+    })),
     { id: "workspace", label: "Folders", category: "App", action: () => { onOpenWorkspace(); onClose(); } },
     ...(onOpenCostDashboard ? [{ id: "cost-dashboard", label: "Cost Dashboard", category: "App", shortcut: fmt("{mod}$"), action: () => { onOpenCostDashboard(); onClose(); } }] : []),
     ...(onToggleFlowMode ? [{ id: "flow-mode", label: "Toggle Flow Mode", category: "View", shortcut: fmt("{mod}{shift}Z"), action: () => { onToggleFlowMode(); onClose(); } }] : []),
@@ -73,10 +82,10 @@ export function CommandPalette({
     ...(pluginCommands ?? []).map(pc => ({
       id: `plugin-${pc.command}`,
       label: pc.title,
-      category: pc.category || "Plugin",
+      category: pc.category || pc.pluginName || "Plugin",
       action: () => { onPluginCommand?.(pc.command); onClose(); },
     })),
-  ], [sessions, onNewSession, onClose, onToggleContext, onToggleSessions, onSelectSession, onOpenSettings, onOpenWorkspace, onOpenCostDashboard, onToggleFlowMode, onAttachProject, onScanCwd, onOpenComposer, onOpenShortcuts, onToggleGit, onToggleSearch, pluginCommands, onPluginCommand]);
+  ], [sessions, onNewSession, onClose, onToggleContext, onToggleSessions, onSelectSession, onOpenSettings, onOpenWorkspace, onOpenCostDashboard, onToggleFlowMode, onAttachProject, onScanCwd, onOpenComposer, onOpenShortcuts, onToggleGit, onToggleSearch, pluginCommands, pluginsWithSettings, onPluginCommand]);
 
   const filtered = useMemo(() => {
     if (!query) return commands.filter((c) => !c.hidden);
