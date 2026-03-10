@@ -113,6 +113,7 @@ jobs:
         if: matrix.enabled == 'true'
         with:
           workspaces: src-tauri
+          shared-key: release-${{ matrix.os }}
 
       - name: Install Linux dependencies
         if: matrix.enabled == 'true' && runner.os == 'Linux'
@@ -212,6 +213,7 @@ jobs:
         if: steps.check.outputs.enabled == 'true'
         with:
           workspaces: src-tauri
+          shared-key: release-${{ matrix.runner }}
 
       - name: Install Linux dependencies
         if: steps.check.outputs.enabled == 'true' && runner.os == 'Linux'
@@ -344,6 +346,7 @@ jobs:
         with:
           name: hermes-ide-${{ matrix.platform_key }}-installer
           path: installer-artifacts/
+          retention-days: 7
 
       - name: Collect updater artifacts
         if: steps.check.outputs.enabled == 'true'
@@ -381,6 +384,7 @@ jobs:
         with:
           name: hermes-ide-${{ matrix.platform_key }}-updater
           path: updater-artifacts/
+          retention-days: 7
 
   # ── Assemble Release ────────────────────────────────────────────────
   assemble-release:
