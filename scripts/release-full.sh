@@ -1,4 +1,22 @@
 #!/usr/bin/env bash
+# ════════════════════════════════════════════════════════════════════════════
+# NOTE: This script is for LOCAL development/testing builds only.
+#
+# For production releases, use the GitHub Actions CI workflow (release.yml),
+# which is the primary release path and handles all platforms (macOS signed +
+# notarized, Linux, and Windows):
+#
+#   gh workflow run release.yml -f platforms=all -f tag=vX.Y.Z
+#
+# Or use the Makefile shortcut:
+#
+#   make release            # trigger CI for all platforms
+#   make release-macos      # trigger CI for macOS only
+#   make release-linux      # trigger CI for Linux only
+#   make release-windows    # trigger CI for Windows only
+#
+# This script remains useful as a fallback for local builds and debugging.
+# ════════════════════════════════════════════════════════════════════════════
 # ────────────────────────────────────────────────────────────────────────────
 # Hermes IDE — Full Interactive Release
 #

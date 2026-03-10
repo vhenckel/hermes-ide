@@ -1,10 +1,17 @@
 # ────────────────────────────────────────────────────────────────────────────
 # Hermes IDE — Release & Development Makefile
 #
-# Platform Build Strategy:
-#   macOS (aarch64 + x86_64) — locally on this Mac (signed + notarized)
-#   Linux (x86_64 + aarch64)  — locally via Docker
-#   Windows (x86_64 + arm64)  — GitHub Actions CI
+# Release Strategy:
+#   The primary release path is the GitHub Actions CI workflow (release.yml).
+#   CI handles all platforms: macOS (signed + notarized), Linux, and Windows.
+#
+#   Local scripts (release-local.sh, release-full.sh) are kept as fallback
+#   for development/testing builds.
+#
+# Quick start:
+#   make bump v=0.4.0       # bump version
+#   make release-push        # push tag to remote
+#   make release             # trigger CI release for all platforms
 #
 # Usage:  make help
 # ────────────────────────────────────────────────────────────────────────────
@@ -16,7 +23,8 @@ PRIVATE_REPO := hermes-hq/hermes-ide
 PUBLIC_REPO := hermes-hq/releases
 
 .PHONY: help dev build test bump release-push \
-        release release-no-windows \
+        release release-macos release-linux release-windows \
+        release-local-full release-local-full-no-windows \
         release-local release-local-macos release-local-macos-fast release-local-linux \
         release-ci-windows release-ci-all \
         release-manifests release-watch release-status release-check release-check-platforms \
@@ -46,12 +54,16 @@ help: ## Show this help
 	@echo "  ─────────────────────────────────────────────────"
 	@grep -E '^[a-z].*:.*## MON:' $(MAKEFILE_LIST) | sed 's/:.* ## MON: /\t/' | awk '{printf "  make %-28s %s\n", $$1, substr($$0, index($$0,"\t")+1)}'
 	@echo ""
+	@echo "  Local Builds (fallback)"
+	@echo "  ─────────────────────────────────────────────────"
+	@grep -E '^[a-z].*:.*## LOCAL:' $(MAKEFILE_LIST) | sed 's/:.* ## LOCAL: /\t/' | awk '{printf "  make %-28s %s\n", $$1, substr($$0, index($$0,"\t")+1)}'
+	@echo ""
 	@echo "  Recommended Workflow"
 	@echo "  ─────────────────────────────────────────────────"
 	@echo "    make bump v=0.4.0"
 	@echo "    make release-push"
-	@echo "    make release                # all 6 platforms"
-	@echo "    make release-no-windows     # macOS + Linux only"
+	@echo "    make release                # trigger CI for all platforms"
+	@echo "    make release-watch          # monitor CI progress"
 	@echo ""
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -88,43 +100,50 @@ release-push: ## BUMP: Push main + tag to remote
 	@echo ""
 
 # ═══════════════════════════════════════════════════════════════════════════
-# RELEASE
+# RELEASE — CI-driven (primary path)
 # ═══════════════════════════════════════════════════════════════════════════
 
-release: ## REL: All 6 platforms — Mac+Linux local, Windows CI (interactive)
-	./scripts/release-full.sh
+release: ## REL: Trigger a full release via CI (all platforms)
+	@VERSION=$$(node -p "require('./src-tauri/tauri.conf.json').version"); \
+	echo "Triggering release v$$VERSION for all platforms..."; \
+	gh workflow run release.yml -f platforms=all -f tag="v$$VERSION"
 
-release-no-windows: ## REL: macOS + Linux only (4 platforms, no CI)
-	./scripts/release-full.sh --skip-windows
+release-macos: ## REL: Trigger macOS-only release via CI
+	@VERSION=$$(node -p "require('./src-tauri/tauri.conf.json').version"); \
+	gh workflow run release.yml -f platforms=macos -f tag="v$$VERSION"
 
-release-local: ## REL: Build macOS + Linux locally, sign, notarize, upload
-	./scripts/release-local.sh --all
+release-linux: ## REL: Trigger Linux-only release via CI
+	@VERSION=$$(node -p "require('./src-tauri/tauri.conf.json').version"); \
+	gh workflow run release.yml -f platforms=linux -f tag="v$$VERSION"
 
-release-local-macos: ## REL: Build macOS only (signed + notarized), upload
-	./scripts/release-local.sh --macos
-
-release-local-macos-fast: ## REL: Build macOS only, skip notarization
-	./scripts/release-local.sh --macos --skip-notarize
-
-release-local-linux: ## REL: Build Linux via Docker (x86_64 + aarch64), upload
-	./scripts/release-local.sh --linux
-
-release-ci-windows: ## REL: Trigger CI for Windows, wait for completion
-	gh workflow run release.yml --repo $(PRIVATE_REPO) -f platforms=windows -f tag=$(TAG)
-	@echo "  Triggered CI for Windows ($(TAG)). Waiting..."
-	@sleep 10
-	@RUN_ID=$$(gh run list --repo $(PRIVATE_REPO) --limit 1 --json databaseId -q '.[0].databaseId'); \
-	echo "  Watching CI run $$RUN_ID..."; \
-	gh run watch $$RUN_ID --repo $(PRIVATE_REPO) --exit-status || \
-		(echo "  [FAIL] Check: gh run view $$RUN_ID --repo $(PRIVATE_REPO)" && exit 1)
-	@echo "  ✓ Windows CI complete"
-
-release-ci-all: ## REL: Trigger CI for all platforms
-	gh workflow run release.yml --repo $(PRIVATE_REPO) -f platforms=all -f tag=$(TAG)
-	@echo "  Triggered CI for all platforms ($(TAG)). Monitor: make release-watch"
+release-windows: ## REL: Trigger Windows-only release via CI
+	@VERSION=$$(node -p "require('./src-tauri/tauri.conf.json').version"); \
+	gh workflow run release.yml -f platforms=windows -f tag="v$$VERSION"
 
 release-manifests: ## REL: Regenerate latest.json + downloads.json
 	./scripts/release-local.sh --manifests
+
+# ═══════════════════════════════════════════════════════════════════════════
+# RELEASE — Local builds (fallback for development/testing)
+# ═══════════════════════════════════════════════════════════════════════════
+
+release-local-full: ## LOCAL: All 6 platforms — Mac+Linux local, Windows CI (interactive)
+	./scripts/release-full.sh
+
+release-local-full-no-windows: ## LOCAL: macOS + Linux only (4 platforms, no CI)
+	./scripts/release-full.sh --skip-windows
+
+release-local: ## LOCAL: Build macOS + Linux locally, sign, notarize, upload
+	./scripts/release-local.sh --all
+
+release-local-macos: ## LOCAL: Build macOS only (signed + notarized), upload
+	./scripts/release-local.sh --macos
+
+release-local-macos-fast: ## LOCAL: Build macOS only, skip notarization
+	./scripts/release-local.sh --macos --skip-notarize
+
+release-local-linux: ## LOCAL: Build Linux via Docker (x86_64 + aarch64), upload
+	./scripts/release-local.sh --linux
 
 # ═══════════════════════════════════════════════════════════════════════════
 # MONITORING
