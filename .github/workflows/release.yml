@@ -37,10 +37,12 @@ jobs:
           ref: ${{ inputs.tag || github.ref }}
 
       - id: version
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
         run: |
           VERSION=$(node -p "require('./src-tauri/tauri.conf.json').version")
-          if [[ -n "${{ inputs.tag }}" ]]; then
-            TAG="${{ inputs.tag }}"
+          if [[ -n "$INPUT_TAG" ]]; then
+            TAG="$INPUT_TAG"
           else
             TAG="v${VERSION}"
           fi
@@ -48,8 +50,10 @@ jobs:
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
       - id: platforms
+        env:
+          INPUT_PLATFORMS: ${{ inputs.platforms || 'all' }}
         run: |
-          PLATFORMS="${{ inputs.platforms || 'all' }}"
+          PLATFORMS="$INPUT_PLATFORMS"
           if [[ "$PLATFORMS" == "all" ]]; then
             echo "macos=true"   >> "$GITHUB_OUTPUT"
             echo "linux=true"   >> "$GITHUB_OUTPUT"
@@ -252,6 +256,7 @@ jobs:
           CERT_PATH=$RUNNER_TEMP/certificate.p12
           KEYCHAIN_PATH=$RUNNER_TEMP/signing.keychain-db
           KEYCHAIN_PASSWORD=$(openssl rand -hex 12)
+          echo "::add-mask::$KEYCHAIN_PASSWORD"
 
           echo -n "$APPLE_CERTIFICATE_BASE64" | base64 --decode > "$CERT_PATH"
 
