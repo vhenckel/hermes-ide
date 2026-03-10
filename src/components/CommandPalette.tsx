@@ -24,6 +24,7 @@ interface CommandPaletteProps {
   pluginCommands?: { command: string; title: string; category?: string; pluginId: string; pluginName: string }[];
   pluginsWithSettings?: { pluginId: string; pluginName: string }[];
   onPluginCommand?: (commandId: string) => void;
+  onCheckPluginUpdates?: () => void;
 }
 
 interface Command {
@@ -36,7 +37,7 @@ interface Command {
 }
 
 export function CommandPalette({
-  onClose, sessions, onSelectSession, onNewSession, onToggleContext, onToggleSessions, onOpenSettings, onOpenWorkspace, onOpenCostDashboard, onToggleFlowMode, onAttachProject, onScanCwd, onOpenComposer, onOpenShortcuts, onToggleGit, onToggleSearch, pluginCommands, pluginsWithSettings, onPluginCommand,
+  onClose, sessions, onSelectSession, onNewSession, onToggleContext, onToggleSessions, onOpenSettings, onOpenWorkspace, onOpenCostDashboard, onToggleFlowMode, onAttachProject, onScanCwd, onOpenComposer, onOpenShortcuts, onToggleGit, onToggleSearch, pluginCommands, pluginsWithSettings, onPluginCommand, onCheckPluginUpdates,
 }: CommandPaletteProps) {
   const [query, setQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -79,13 +80,14 @@ export function CommandPalette({
       shortcut: i < 9 ? fmt(`{mod}${i + 1}`) : undefined,
       action: () => { onSelectSession(s.id); onClose(); },
     })),
+    ...(onCheckPluginUpdates ? [{ id: "check-plugin-updates", label: "Check for Plugin Updates", category: "Plugins", action: () => { onCheckPluginUpdates(); onClose(); } }] : []),
     ...(pluginCommands ?? []).map(pc => ({
       id: `plugin-${pc.command}`,
       label: pc.title,
       category: pc.category || pc.pluginName || "Plugin",
       action: () => { onPluginCommand?.(pc.command); onClose(); },
     })),
-  ], [sessions, onNewSession, onClose, onToggleContext, onToggleSessions, onSelectSession, onOpenSettings, onOpenWorkspace, onOpenCostDashboard, onToggleFlowMode, onAttachProject, onScanCwd, onOpenComposer, onOpenShortcuts, onToggleGit, onToggleSearch, pluginCommands, pluginsWithSettings, onPluginCommand]);
+  ], [sessions, onNewSession, onClose, onToggleContext, onToggleSessions, onSelectSession, onOpenSettings, onOpenWorkspace, onOpenCostDashboard, onToggleFlowMode, onAttachProject, onScanCwd, onOpenComposer, onOpenShortcuts, onToggleGit, onToggleSearch, pluginCommands, pluginsWithSettings, onPluginCommand, onCheckPluginUpdates]);
 
   const filtered = useMemo(() => {
     if (!query) return commands.filter((c) => !c.hidden);

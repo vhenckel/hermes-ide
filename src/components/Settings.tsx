@@ -489,7 +489,42 @@ export function Settings({ onClose, initialTab, pluginRuntime }: SettingsProps) 
               </div>
             )}
 
-            {activeTab === "plugins" && <PluginManager runtime={pluginRuntime} />}
+            {activeTab === "plugins" && (
+              <>
+                <div className="settings-section">
+                  <h3 className="settings-section-title">Plugin Updates</h3>
+                  <div className="settings-group">
+                    <label className="settings-label">Check for plugin updates</label>
+                    <select
+                      className="settings-select"
+                      value={settings.plugin_update_check || "startup"}
+                      onChange={(e) => updateSetting("plugin_update_check", e.target.value)}
+                    >
+                      <option value="startup">On startup</option>
+                      <option value="daily">Daily</option>
+                      <option value="weekly">Weekly</option>
+                      <option value="never">Never</option>
+                    </select>
+                  </div>
+                  <div className="settings-group">
+                    <label className="settings-label-row">
+                      <input
+                        type="checkbox"
+                        checked={settings.plugin_auto_update === "true"}
+                        onChange={(e) =>
+                          updateSetting("plugin_auto_update", e.target.checked ? "true" : "false")
+                        }
+                      />
+                      Auto-update plugins
+                    </label>
+                    <p className="settings-hint">
+                      Automatically install plugin updates when they become available.
+                    </p>
+                  </div>
+                </div>
+                <PluginManager runtime={pluginRuntime} />
+              </>
+            )}
 
             {activeTab === "privacy" && (
               <div className="settings-section">

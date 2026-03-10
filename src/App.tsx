@@ -56,8 +56,10 @@ import { focusTerminal } from "./terminal/TerminalPool";
 import { useNativeMenuEvents } from "./hooks/useNativeMenuEvents";
 import { useMenuStateSync } from "./hooks/useMenuStateSync";
 import { useAutoUpdater } from "./hooks/useAutoUpdater";
+import { usePluginUpdateChecker } from "./hooks/usePluginUpdateChecker";
 import { useSessionGitSummary } from "./hooks/useSessionGitSummary";
 import { UpdateDialog } from "./components/UpdateDialog";
+import { PluginUpdateBanner } from "./components/PluginUpdateBanner";
 import { WhatsNewDialog } from "./components/WhatsNewDialog";
 import { OnboardingWizard } from "./components/OnboardingWizard";
 
@@ -139,6 +141,7 @@ function AppContent() {
   });
 
   const { commands: pluginCommands, panels: pluginPanels, statusBarItems: pluginStatusBarItems, pluginsWithSettings } = usePluginRuntime(pluginRuntime);
+  const pluginUpdater = usePluginUpdateChecker(pluginRuntime);
 
   useEffect(() => {
     const loader = new PluginLoader(pluginRuntime);
@@ -572,6 +575,7 @@ function AppContent() {
           );
         })()}
         <div className="main-area">
+          <PluginUpdateBanner updater={pluginUpdater} />
           <div className="terminal-and-timeline">
             <div className="terminal-container">
               {state.layout.root ? (
@@ -647,6 +651,13 @@ function AppContent() {
           pluginCommands={pluginCommands}
           pluginsWithSettings={pluginsWithSettings}
           onPluginCommand={(commandId) => pluginRuntime.executeCommand(commandId)}
+          onCheckPluginUpdates={async () => {
+            await pluginUpdater.checkNow();
+            if (pluginUpdater.updatesAvailable.length === 0) {
+              setPluginToast({ message: "All plugins are up to date", type: "info" });
+              setTimeout(() => setPluginToast(null), 3000);
+            }
+          }}
         />
       )}
 

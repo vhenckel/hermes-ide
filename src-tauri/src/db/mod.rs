@@ -1988,6 +1988,11 @@ const VALID_SETTING_KEYS: &[&str] = &[
     "auto_cancel_delay_ms",
     // Keyboard shortcuts
     "command_palette_shortcut",
+    // Plugin updates
+    "plugin_update_check",
+    "plugin_auto_update",
+    "plugin_ignored_updates",
+    "plugin_last_update_check",
 ];
 
 #[tauri::command]
