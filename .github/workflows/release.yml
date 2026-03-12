@@ -483,6 +483,8 @@ jobs:
             gh release create "$TAG" \
               --title "Hermes IDE $TAG" \
               --notes-file release-notes.txt
+            # Give GitHub a moment to propagate the new release before uploading assets
+            sleep 5
           fi
 
       - name: Upload build artifacts to release
@@ -498,9 +500,22 @@ jobs:
           if [ ${#FILES[@]} -eq 0 ]; then
             echo "No new artifacts to upload"
           else
-            gh release upload "$TAG" \
-              --clobber \
-              "${FILES[@]}"
+            for attempt in 1 2 3; do
+              echo "Upload attempt $attempt of 3..."
+              if gh release upload "$TAG" \
+                --clobber \
+                "${FILES[@]}"; then
+                echo "Upload succeeded"
+                break
+              fi
+              if [ "$attempt" -lt 3 ]; then
+                echo "Upload failed, retrying in 15s..."
+                sleep 15
+              else
+                echo "::error::All upload attempts failed"
+                exit 1
+              fi
+            done
           fi
 
       - name: Regenerate manifests from all release assets
