@@ -9,6 +9,7 @@
  * This file contains the input handling & intelligence logic that ties everything together.
  */
 
+import { listen } from "@tauri-apps/api/event";
 import { writeToSession } from "../api/sessions";
 import { suggest } from "./intelligence/suggestionEngine";
 import { resolveIntent, getIntentSuggestions } from "./intentCommands";
@@ -46,6 +47,8 @@ import {
   getCursorPixelPosition,
   getCursorPosition,
   cleanSelection,
+  estimateInitialDimensions,
+  getFocusedSessionId,
   type PoolEntry,
 } from "./pool";
 
@@ -79,14 +82,43 @@ export function updateSettings(settings: Record<string, string>): void {
     entry.terminal.options.scrollback = scrollback;
     entry.terminal.options.theme = { ...theme, cursor: entry.terminal.options.theme?.cursor, cursorAccent: theme.background };
     if (entry.attached && entry.opened) {
-      try { entry.fitAddon.fit(); } catch { /* ignore */ }
+      try {
+        const proposed = entry.fitAddon.proposeDimensions();
+        if (proposed && proposed.cols >= 10 && proposed.rows >= 2) {
+          entry.fitAddon.fit();
+          entry.terminal.refresh(0, entry.terminal.rows - 1);
+        }
+      } catch { /* ignore */ }
     }
   }
+}
+
+// ─── Native SIGINT Listener (macOS) ──────────────────────────────────
+//
+// On macOS, WKWebView consumes Ctrl+C at the native level before JavaScript
+// receives the keydown event. The Rust menu system intercepts it as a menu
+// accelerator and emits "native-sigint". We listen here and forward \x03
+// to the active terminal's PTY.
+
+let sigintListenerReady = false;
+
+export function setupNativeSigintListener(): void {
+  if (sigintListenerReady) return;
+  sigintListenerReady = true;
+  listen("native-sigint", () => {
+    const sessionId = getFocusedSessionId();
+    if (!sessionId) return;
+    handleTerminalInput(sessionId, "\x03");
+  }).catch((err) => {
+    console.warn("[TerminalPool] Failed to listen for native-sigint:", err);
+    sigintListenerReady = false;
+  });
 }
 
 // ─── Terminal Creation (wires input handler) ─────────────────────────
 
 export async function createTerminal(sessionId: string, color: string): Promise<void> {
+  setupNativeSigintListener(); // idempotent — sets up once
   return createTerminalCore(sessionId, color, handleTerminalInput);
 }
 
@@ -576,4 +608,5 @@ export {
   clearGhostText,
   dismissSuggestions,
   getCursorPosition,
+  estimateInitialDimensions,
 };
