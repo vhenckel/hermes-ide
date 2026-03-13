@@ -146,7 +146,7 @@ export function OnboardingWizard() {
                 composer, git management, file explorer, and cost tracking.
               </p>
               <span className="onboarding-early-access">
-                Free during early access
+                Free
               </span>
             </div>
           )}
