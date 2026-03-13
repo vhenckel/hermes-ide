@@ -430,4 +430,226 @@ mod tests {
         assert!(analyzer.is_busy);
         assert!(matches!(analyzer.pending_phase, Some(SessionPhase::Busy)));
     }
+
+    // ── Prompt detection: start-of-line custom chars ──
+
+    #[test]
+    fn detects_prompt_chars_at_start_of_line() {
+        // oh-my-zsh robbyrussell theme
+        assert!(is_shell_prompt("➜  my-project git:(main) "));
+        assert!(is_shell_prompt("➜  ~ "));
+        // powerlevel10k / starship with leading indicator
+        assert!(is_shell_prompt("❯ "));
+        assert!(is_shell_prompt("❯ ~/code"));
+    }
+
+    #[test]
+    fn detects_custom_prompt_formats() {
+        // Bare prompt chars
+        assert!(is_shell_prompt("➜ "));
+        assert!(is_shell_prompt("❯"));
+        // Path context with prompt char at end
+        assert!(is_shell_prompt("~/projects ❯"));
+        assert!(is_shell_prompt("user@host ~/code ➜"));
+        // PS1 variants ending with $
+        assert!(is_shell_prompt("user@host:~/code$ "));
+    }
+
+    // ── Auto-launch lifecycle ──
+
+    #[test]
+    fn pending_ai_launch_set_on_first_prompt() {
+        let mut analyzer = OutputAnalyzer::new();
+        // Simulate an AI session: set ai_provider info
+        analyzer.pending_ai_launch = false;
+        analyzer.shell_ready = false;
+
+        // Feed a shell prompt line
+        let analysis = LineAnalysis {
+            token_update: None,
+            tool_call: None,
+            action: None,
+            phase_hint: Some(PhaseHint::PromptDetected),
+            memory_fact: None,
+        };
+        analyzer.apply_analysis(analysis);
+        // First prompt should set shell_ready and pending_ai_launch
+        assert!(analyzer.shell_ready);
+        assert!(analyzer.pending_ai_launch);
+    }
+
+    #[test]
+    fn pending_ai_launch_not_set_without_prompt() {
+        let mut analyzer = OutputAnalyzer::new();
+        analyzer.pending_ai_launch = false;
+        analyzer.shell_ready = false;
+
+        // Feed a work-started hint (not a prompt)
+        let analysis = LineAnalysis {
+            token_update: None,
+            tool_call: None,
+            action: None,
+            phase_hint: Some(PhaseHint::WorkStarted),
+            memory_fact: None,
+        };
+        analyzer.apply_analysis(analysis);
+        assert!(!analyzer.shell_ready);
+        assert!(!analyzer.pending_ai_launch);
+    }
+
+    #[test]
+    fn pending_ai_launch_not_set_on_subsequent_prompts() {
+        let mut analyzer = OutputAnalyzer::new();
+        analyzer.shell_ready = false;
+
+        // First prompt
+        let analysis = LineAnalysis {
+            token_update: None,
+            tool_call: None,
+            action: None,
+            phase_hint: Some(PhaseHint::PromptDetected),
+            memory_fact: None,
+        };
+        analyzer.apply_analysis(analysis);
+        assert!(analyzer.pending_ai_launch);
+
+        // Consume the flag
+        analyzer.pending_ai_launch = false;
+
+        // Second prompt should NOT re-set pending_ai_launch
+        let analysis2 = LineAnalysis {
+            token_update: None,
+            tool_call: None,
+            action: None,
+            phase_hint: Some(PhaseHint::PromptDetected),
+            memory_fact: None,
+        };
+        analyzer.apply_analysis(analysis2);
+        assert!(!analyzer.pending_ai_launch);
+    }
+
+    #[test]
+    fn pending_ai_launch_from_ohmyzsh_prompt() {
+        // Verify the prompt detection works for oh-my-zsh
+        assert!(is_shell_prompt("➜  my-project git:(main) "));
+    }
+
+    #[test]
+    fn pending_ai_launch_from_starship_prompt() {
+        // Verify the prompt detection works for starship
+        assert!(is_shell_prompt("~/code ❯"));
+        assert!(is_shell_prompt("~/projects ➤"));
+    }
+
+    // ── Silence fallback ──
+
+    #[test]
+    fn silence_fallback_triggers_ai_launch() {
+        let mut analyzer = OutputAnalyzer::new();
+        analyzer.is_busy = true;
+        analyzer.shell_ready = false;
+
+        analyzer.check_silence();
+
+        assert!(analyzer.shell_ready);
+        assert!(analyzer.pending_ai_launch);
+        assert!(!analyzer.is_busy);
+        assert!(matches!(
+            analyzer.pending_phase,
+            Some(SessionPhase::ShellReady)
+        ));
+    }
+
+    #[test]
+    fn silence_fallback_does_not_retrigger() {
+        let mut analyzer = OutputAnalyzer::new();
+        analyzer.is_busy = true;
+        analyzer.shell_ready = false;
+
+        // First silence → triggers fallback
+        analyzer.check_silence();
+        assert!(analyzer.pending_ai_launch);
+
+        // Consume flag, make busy again
+        analyzer.pending_ai_launch = false;
+        analyzer.is_busy = true;
+
+        // Second silence — shell_ready is already true, so fallback should NOT fire
+        analyzer.check_silence();
+        assert!(!analyzer.pending_ai_launch);
+    }
+
+    #[test]
+    fn rapid_output_before_prompt_no_premature_launch() {
+        let mut analyzer = OutputAnalyzer::new();
+        analyzer.shell_ready = false;
+
+        // Simulate rapid output (work started, not a prompt)
+        for _ in 0..10 {
+            let analysis = LineAnalysis {
+                token_update: None,
+                tool_call: None,
+                action: None,
+                phase_hint: Some(PhaseHint::WorkStarted),
+                memory_fact: None,
+            };
+            analyzer.apply_analysis(analysis);
+        }
+        // No prompt seen → no auto-launch
+        assert!(!analyzer.shell_ready);
+        assert!(!analyzer.pending_ai_launch);
+    }
+
+    // ── AI launch command coverage ──
+
+    #[test]
+    fn ai_launch_command_all_providers() {
+        use super::ai_launch_command;
+
+        // Without auto-approve
+        assert_eq!(ai_launch_command("claude", false), Some("claude".into()));
+        assert_eq!(ai_launch_command("aider", false), Some("aider".into()));
+        assert_eq!(ai_launch_command("codex", false), Some("codex".into()));
+        assert_eq!(ai_launch_command("gemini", false), Some("gemini".into()));
+        assert_eq!(
+            ai_launch_command("copilot", false),
+            Some("gh copilot".into())
+        );
+        assert_eq!(ai_launch_command("unknown", false), None);
+
+        // With auto-approve
+        assert_eq!(
+            ai_launch_command("claude", true),
+            Some("claude --dangerously-skip-permissions".into())
+        );
+        assert_eq!(ai_launch_command("aider", true), Some("aider --yes".into()));
+        assert_eq!(
+            ai_launch_command("codex", true),
+            Some("codex --full-auto".into())
+        );
+        assert_eq!(
+            ai_launch_command("gemini", true),
+            Some("gemini --yolo".into())
+        );
+        // copilot doesn't have auto-approve flag
+        assert_eq!(
+            ai_launch_command("copilot", true),
+            Some("gh copilot".into())
+        );
+    }
+
+    // ── Prompt detection after column fix ──
+
+    #[test]
+    fn prompt_detection_after_column_fix() {
+        // With PROMPT_EOL_MARK="" set, the "%" partial-line marker is gone.
+        // Verify that actual prompts are still detected.
+        assert!(is_shell_prompt("user@host:~$ "));
+        assert!(is_shell_prompt("% "));
+        assert!(is_shell_prompt("➜  project git:(main) "));
+        assert!(is_shell_prompt("~/code ❯"));
+
+        // "%" alone is a valid bare zsh prompt — it should still match.
+        assert!(is_shell_prompt("%"));
+    }
 }

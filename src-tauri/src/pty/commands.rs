@@ -764,6 +764,7 @@ pub fn create_session(
             .map_err(|e| format!("Failed to get PTY writer: {}", e))?,
     ));
     let writer_for_reader = Arc::clone(&writer);
+    let writer_for_silence = Arc::clone(&writer);
 
     // Transition to Initializing
     {
@@ -1132,12 +1133,53 @@ pub fn create_session(
                             if let Some(new_phase) = a.take_pending_phase() {
                                 if let Ok(mut s) = session_silence.lock() {
                                     if s.phase != new_phase {
-                                        s.phase = new_phase;
+                                        s.phase = new_phase.clone();
                                         s.detected_agent = a.detected_agent.clone();
                                         s.metrics = a.to_metrics();
                                         s.last_activity_at = now();
                                         let update = SessionUpdate::from(&*s);
                                         let _ = app_silence.emit("session-updated", &update);
+                                    }
+                                }
+                            }
+
+                            // Fallback auto-launch: check_silence may have set
+                            // pending_ai_launch when an unrecognized prompt went
+                            // silent.  The reader thread is blocked on read() and
+                            // won't see the flag, so we consume it here.
+                            if a.pending_ai_launch {
+                                a.pending_ai_launch = false;
+                                let launch_info = session_silence.lock().ok().map(|s| {
+                                    (s.ai_provider.clone(), s.has_initial_context, s.auto_approve)
+                                });
+                                if let Some((Some(ref provider), has_context, auto_approve)) =
+                                    launch_info
+                                {
+                                    if let Some(launch_cmd) =
+                                        ai_launch_command(provider, auto_approve)
+                                    {
+                                        let supports_cli_prompt =
+                                            provider == "claude" || provider == "gemini";
+                                        let cmd = if has_context && supports_cli_prompt {
+                                            format!("{} \"Read the file at $HERMES_CONTEXT for project context about the attached workspaces.\"", launch_cmd)
+                                        } else {
+                                            launch_cmd
+                                        };
+                                        if let Ok(mut w) = writer_for_silence.lock() {
+                                            let _ = w.write_all(format!("{}\r", cmd).as_bytes());
+                                            let _ = w.flush();
+                                        }
+                                        if has_context && supports_cli_prompt {
+                                            a.context_injected = true;
+                                        }
+                                        if let Ok(mut s) = session_silence.lock() {
+                                            if has_context && supports_cli_prompt {
+                                                s.context_injected = true;
+                                            }
+                                            s.phase = SessionPhase::LaunchingAgent;
+                                            let update = SessionUpdate::from(&*s);
+                                            let _ = app_silence.emit("session-updated", &update);
+                                        }
                                     }
                                 }
                             }
