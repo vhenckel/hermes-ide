@@ -17,8 +17,7 @@ Hermes IDE is a desktop terminal emulator that deeply integrates AI assistance i
 **Platforms:** macOS, Windows, Linux
 
 ---
-
-![GIF](https://github.com/user-attachments/assets/7f5aa121-86c4-4695-8296-00058a73d058)
+![GIF](https://github.com/user-attachments/assets/dce248cc-d215-48c7-a1c1-33e539c2a20f)
 
 ## Features
 
