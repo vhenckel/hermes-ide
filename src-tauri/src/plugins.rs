@@ -2,7 +2,9 @@ use serde::Serialize;
 use std::fs;
 use std::io::Cursor;
 use std::path::PathBuf;
-use tauri::Manager;
+use tauri::{Manager, State};
+
+use crate::AppState;
 
 /// Returns the plugins directory path inside the app data directory.
 fn plugins_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
@@ -309,7 +311,16 @@ fn find_manifest_in_dir(dir: &std::path::Path) -> Result<(PathBuf, String), Stri
 /// Fetch a URL and return the response body as a string.
 /// Used by plugins with the "network" permission.
 #[tauri::command]
-pub async fn plugin_fetch_url(url: String) -> Result<String, String> {
+pub async fn plugin_fetch_url(url: String, plugin_id: String, state: State<'_, AppState>) -> Result<String, String> {
+    {
+        let db = state.db.lock().map_err(|e| e.to_string())?;
+        if !db.has_plugin_permission(&plugin_id, "network")? {
+            return Err(format!(
+                "Plugin \"{}\" does not have \"network\" permission",
+                plugin_id
+            ));
+        }
+    }
     let response = reqwest::get(&url)
         .await
         .map_err(|e| format!("Failed to fetch URL: {}", e))?;

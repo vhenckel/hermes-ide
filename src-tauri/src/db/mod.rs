@@ -734,6 +734,33 @@ impl Database {
         Ok(entries)
     }
 
+    // ─── Plugin Permissions ─────────────────────────────────────
+
+    /// Query the permissions_granted JSON array for a plugin.
+    pub fn get_plugin_permissions(&self, plugin_id: &str) -> Result<Vec<String>, String> {
+        let json_str: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT permissions_granted FROM plugins WHERE id = ?1",
+                params![plugin_id],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|e| e.to_string())?;
+
+        match json_str {
+            Some(s) => serde_json::from_str::<Vec<String>>(&s)
+                .map_err(|e| format!("Failed to parse permissions JSON: {}", e)),
+            None => Ok(vec![]),
+        }
+    }
+
+    /// Check if a plugin has a specific permission.
+    pub fn has_plugin_permission(&self, plugin_id: &str, permission: &str) -> Result<bool, String> {
+        let perms = self.get_plugin_permissions(plugin_id)?;
+        Ok(perms.iter().any(|p| p == permission))
+    }
+
     // ─── Settings ────────────────────────────────────────────────
 
     pub fn get_setting(&self, key: &str) -> Result<Option<String>, String> {
@@ -2697,6 +2724,46 @@ pub fn import_settings(
     db.get_all_settings()
 }
 
+/// Check if a plugin has a specific permission granted in the DB.
+fn has_plugin_permission(
+    db: &Database,
+    plugin_id: &str,
+    permission: &str,
+) -> Result<bool, String> {
+    let perms = db.get_plugin_permissions(plugin_id)?;
+    Ok(perms.iter().any(|p| p == permission))
+}
+
+#[tauri::command]
+pub fn save_plugin_metadata(
+    plugin_id: String,
+    version: String,
+    name: String,
+    permissions: Vec<String>,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let perms_json =
+        serde_json::to_string(&permissions).map_err(|e| format!("Failed to serialize permissions: {}", e))?;
+    db.conn
+        .execute(
+            "INSERT INTO plugins (id, version, name, permissions_granted) VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT(id) DO UPDATE SET version = ?2, name = ?3, permissions_granted = ?4, updated_at = datetime('now')",
+            params![plugin_id, version, name, perms_json],
+        )
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_plugin_permissions(
+    plugin_id: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<String>, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    db.get_plugin_permissions(&plugin_id)
+}
+
 #[tauri::command]
 pub fn get_plugin_setting(
     key: String,
@@ -2704,6 +2771,12 @@ pub fn get_plugin_setting(
     state: State<'_, AppState>,
 ) -> Result<Option<String>, String> {
     let db = state.db.lock().map_err(|e| e.to_string())?;
+    if !has_plugin_permission(&db, &plugin_id, "storage")? {
+        return Err(format!(
+            "Plugin \"{}\" does not have \"storage\" permission",
+            plugin_id
+        ));
+    }
     db.conn
         .query_row(
             "SELECT value FROM plugin_storage WHERE plugin_id = ?1 AND key = ?2",
@@ -2722,6 +2795,12 @@ pub fn set_plugin_setting(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let db = state.db.lock().map_err(|e| e.to_string())?;
+    if !has_plugin_permission(&db, &plugin_id, "storage")? {
+        return Err(format!(
+            "Plugin \"{}\" does not have \"storage\" permission",
+            plugin_id
+        ));
+    }
     db.conn
         .execute(
             "INSERT INTO plugin_storage (plugin_id, key, value, updated_at) VALUES (?1, ?2, ?3, datetime('now'))
@@ -2739,6 +2818,12 @@ pub fn delete_plugin_setting(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let db = state.db.lock().map_err(|e| e.to_string())?;
+    if !has_plugin_permission(&db, &plugin_id, "storage")? {
+        return Err(format!(
+            "Plugin \"{}\" does not have \"storage\" permission",
+            plugin_id
+        ));
+    }
     db.conn
         .execute(
             "DELETE FROM plugin_storage WHERE plugin_id = ?1 AND key = ?2",
@@ -2790,6 +2875,12 @@ pub fn get_plugin_settings_batch(
     state: State<'_, AppState>,
 ) -> Result<std::collections::HashMap<String, String>, String> {
     let db = state.db.lock().map_err(|e| e.to_string())?;
+    if !has_plugin_permission(&db, &plugin_id, "storage")? {
+        return Err(format!(
+            "Plugin \"{}\" does not have \"storage\" permission",
+            plugin_id
+        ));
+    }
     let mut stmt = db
         .conn
         .prepare(

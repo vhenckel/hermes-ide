@@ -490,6 +490,8 @@ pub fn run() {
             db::get_disabled_plugin_ids,
             db::cleanup_plugin_data,
             db::get_plugin_settings_batch,
+            db::save_plugin_metadata,
+            db::get_plugin_permissions,
             // SSH saved hosts
             db::list_ssh_saved_hosts,
             db::upsert_ssh_saved_host,

@@ -2,6 +2,13 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { PluginRuntime, type PluginModule } from "../PluginRuntime";
 import type { PluginAPICallbacks } from "../PluginAPI";
 
+vi.mock("@tauri-apps/api/core", () => ({
+	invoke: vi.fn(),
+}));
+
+import { invoke } from "@tauri-apps/api/core";
+const mockInvoke = vi.mocked(invoke);
+
 function createMockCallbacks(): PluginAPICallbacks {
 	return {
 		onPanelToggle: vi.fn(),
@@ -47,6 +54,8 @@ describe("PluginRuntime", () => {
 	beforeEach(() => {
 		callbacks = createMockCallbacks();
 		runtime = new PluginRuntime(callbacks);
+		mockInvoke.mockReset();
+		mockInvoke.mockResolvedValue(undefined);
 	});
 
 	describe("register", () => {
@@ -278,6 +287,29 @@ describe("PluginRuntime", () => {
 			unsub();
 			runtime.register(createTestPlugin());
 			expect(listener).not.toHaveBeenCalled();
+		});
+	});
+
+	describe("permission metadata persistence", () => {
+		it("should call save_plugin_metadata on activation", async () => {
+			const plugin = createTestPlugin();
+			runtime.register(plugin);
+			await runtime.activate("test.plugin");
+			expect(mockInvoke).toHaveBeenCalledWith("save_plugin_metadata", {
+				pluginId: "test.plugin",
+				version: "1.0.0",
+				name: "Test Plugin",
+				permissions: expect.arrayContaining(["clipboard.read", "clipboard.write"]),
+			});
+		});
+
+		it("should still activate even if metadata save fails", async () => {
+			mockInvoke.mockRejectedValue(new Error("DB unavailable"));
+			const activate = vi.fn();
+			const plugin = createTestPlugin({ activate });
+			runtime.register(plugin);
+			await runtime.activate("test.plugin");
+			expect(activate).toHaveBeenCalledOnce();
 		});
 	});
 

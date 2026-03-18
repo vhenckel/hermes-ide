@@ -241,4 +241,44 @@ describe("createPluginAPI", () => {
 			expect(mockInvoke).toHaveBeenCalledWith("delete_plugin_setting", { pluginId: "my-plugin", key: "key" });
 		});
 	});
+
+	describe("settings permission enforcement", () => {
+		const testSchema = {
+			fontSize: { type: "number" as const, title: "Font Size", default: 14, min: 8, max: 72, step: 1 },
+		};
+
+		it("settings.get() should throw without storage permission", async () => {
+			const api = createPluginAPI("test", new Set(), testSchema, callbacks, commandHandlers, panelComponents);
+			await expect(api.settings.get("fontSize")).rejects.toThrow(PermissionDeniedError);
+		});
+
+		it("settings.update() should throw without storage permission", async () => {
+			const api = createPluginAPI("test", new Set(), testSchema, callbacks, commandHandlers, panelComponents);
+			await expect(api.settings.update("fontSize", 16)).rejects.toThrow(PermissionDeniedError);
+		});
+
+		it("settings.getAll() should throw without storage permission", async () => {
+			const api = createPluginAPI("test", new Set(), testSchema, callbacks, commandHandlers, panelComponents);
+			await expect(api.settings.getAll()).rejects.toThrow(PermissionDeniedError);
+		});
+
+		it("settings.onDidChange() should throw without storage permission", () => {
+			const api = createPluginAPI("test", new Set(), testSchema, callbacks, commandHandlers, panelComponents);
+			expect(() => api.settings.onDidChange("fontSize", vi.fn())).toThrow(PermissionDeniedError);
+		});
+	});
+
+	describe("network", () => {
+		it("network.fetch should pass pluginId to invoke", async () => {
+			mockInvoke.mockResolvedValue("response body");
+			const api = createPluginAPI("my-plugin", new Set(["network"]), undefined, callbacks, commandHandlers, panelComponents);
+			await api.network.fetch("https://example.com");
+			expect(mockInvoke).toHaveBeenCalledWith("plugin_fetch_url", { url: "https://example.com", pluginId: "my-plugin" });
+		});
+
+		it("network.fetch should throw without network permission", () => {
+			const api = createPluginAPI("test", new Set(), undefined, callbacks, commandHandlers, panelComponents);
+			expect(() => api.network.fetch("https://example.com")).toThrow(PermissionDeniedError);
+		});
+	});
 });

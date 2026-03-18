@@ -9,6 +9,15 @@ import type { PluginRuntime } from "../plugins/PluginRuntime";
 import { PluginSettingsForm } from "./PluginSettingsForm";
 import { REGISTRY_URL } from "../plugins/constants";
 
+const PERMISSION_DESCRIPTIONS: Record<string, string> = {
+	"storage": "Read and write persistent data on your device",
+	"network": "Make network requests to external services",
+	"clipboard.read": "Read text from your clipboard",
+	"clipboard.write": "Write text to your clipboard",
+	"notifications": "Show desktop notifications",
+	"sessions.read": "Access terminal session information",
+};
+
 interface InstalledPluginInfo {
 	id: string;
 	dir_name: string;
@@ -69,6 +78,7 @@ export function PluginManager({ runtime, onConfirmUpdate, refreshTrigger }: Plug
 	const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
 	const [checking, setChecking] = useState(false);
 	const [pendingUninstall, setPendingUninstall] = useState<{ pluginId: string; dirName: string; pluginName: string } | null>(null);
+	const [pendingInstall, setPendingInstall] = useState<RegistryPlugin | null>(null);
 
 	const loadPlugins = useCallback(async () => {
 		setLoading(true);
@@ -166,12 +176,21 @@ export function PluginManager({ runtime, onConfirmUpdate, refreshTrigger }: Plug
 		await runtime.activateStartupPlugins();
 	}, [runtime]);
 
-	const handleInstall = useCallback(async (plugin: RegistryPlugin) => {
+	const doInstall = useCallback(async (plugin: RegistryPlugin) => {
 		setInstallingId(plugin.id);
 		setInstallPhase(null);
 		setError(null);
 		try {
 			await downloadAndInstallPlugin(plugin.downloadUrl, (phase) => setInstallPhase(phase));
+			// Save plugin metadata (permissions) to DB for backend enforcement
+			try {
+				await invoke("save_plugin_metadata", {
+					pluginId: plugin.id,
+					version: plugin.version,
+					name: plugin.name,
+					permissions: plugin.permissions ?? [],
+				});
+			} catch { /* best effort */ }
 			await loadPlugins();
 			await hotLoadPlugin();
 		} catch (err) {
@@ -181,12 +200,36 @@ export function PluginManager({ runtime, onConfirmUpdate, refreshTrigger }: Plug
 		setInstallPhase(null);
 	}, [loadPlugins, hotLoadPlugin]);
 
+	const handleInstall = useCallback((plugin: RegistryPlugin) => {
+		if (plugin.permissions && plugin.permissions.length > 0) {
+			setPendingInstall(plugin);
+		} else {
+			doInstall(plugin);
+		}
+	}, [doInstall]);
+
+	const confirmInstall = useCallback(() => {
+		if (!pendingInstall) return;
+		const plugin = pendingInstall;
+		setPendingInstall(null);
+		doInstall(plugin);
+	}, [pendingInstall, doInstall]);
+
 	const handleUpdate = useCallback(async (plugin: RegistryPlugin) => {
 		setInstallingId(plugin.id);
 		setInstallPhase(null);
 		setError(null);
 		try {
 			await downloadAndInstallPlugin(plugin.downloadUrl, (phase) => setInstallPhase(phase));
+			// Save updated metadata + permissions to DB
+			try {
+				await invoke("save_plugin_metadata", {
+					pluginId: plugin.id,
+					version: plugin.version,
+					name: plugin.name,
+					permissions: plugin.permissions ?? [],
+				});
+			} catch { /* best effort */ }
 			await loadPlugins();
 			await hotLoadPlugin();
 		} catch (err) {
@@ -359,8 +402,12 @@ export function PluginManager({ runtime, onConfirmUpdate, refreshTrigger }: Plug
 						</div>
 						{p.manifest.permissions && p.manifest.permissions.length > 0 && (
 							<div className="pm-detail-perms">
+								<div className="pm-perms-title">Permissions</div>
 								{p.manifest.permissions.map(perm => (
-									<span key={perm} className="pm-detail-perm">{perm}</span>
+									<div key={perm} className="pm-perm-row">
+										<span className="pm-detail-perm">{perm}</span>
+										<span className="pm-perm-desc">{PERMISSION_DESCRIPTIONS[perm] ?? perm}</span>
+									</div>
 								))}
 							</div>
 						)}
@@ -479,8 +526,12 @@ export function PluginManager({ runtime, onConfirmUpdate, refreshTrigger }: Plug
 						</div>
 						{p.permissions && p.permissions.length > 0 && (
 							<div className="pm-detail-perms">
+								<div className="pm-perms-title">Permissions</div>
 								{p.permissions.map(perm => (
-									<span key={perm} className="pm-detail-perm">{perm}</span>
+									<div key={perm} className="pm-perm-row">
+										<span className="pm-detail-perm">{perm}</span>
+										<span className="pm-perm-desc">{PERMISSION_DESCRIPTIONS[perm] ?? perm}</span>
+									</div>
 								))}
 							</div>
 						)}
@@ -671,6 +722,28 @@ export function PluginManager({ runtime, onConfirmUpdate, refreshTrigger }: Plug
 						<div className="pm-confirm-actions">
 							<button className="pm-btn" onClick={() => setPendingUninstall(null)}>Cancel</button>
 							<button className="pm-btn pm-btn-danger" onClick={confirmUninstall}>Uninstall</button>
+						</div>
+					</div>
+				</div>
+			)}
+
+			{/* Install Confirmation Dialog */}
+			{pendingInstall && (
+				<div className="pm-confirm-overlay" onClick={() => setPendingInstall(null)}>
+					<div className="pm-confirm-dialog" onClick={(e) => e.stopPropagation()}>
+						<div className="pm-confirm-title">Install &ldquo;{pendingInstall.name}&rdquo;?</div>
+						<div className="pm-confirm-desc">This plugin requests the following permissions:</div>
+						<div className="pm-detail-perms">
+							{(pendingInstall.permissions ?? []).map(perm => (
+								<div key={perm} className="pm-perm-row">
+									<span className="pm-detail-perm">{perm}</span>
+									<span className="pm-perm-desc">{PERMISSION_DESCRIPTIONS[perm] ?? perm}</span>
+								</div>
+							))}
+						</div>
+						<div className="pm-confirm-actions">
+							<button className="pm-btn" onClick={() => setPendingInstall(null)}>Cancel</button>
+							<button className="pm-btn pm-btn-primary" onClick={confirmInstall}>Install</button>
 						</div>
 					</div>
 				</div>

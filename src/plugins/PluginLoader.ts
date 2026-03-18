@@ -102,8 +102,23 @@ export class PluginLoader {
 			throw new Error(`Failed to read bundle for "${info.id}": ${err}`);
 		}
 
+		// Snapshot existing __hermesPlugins keys before execution
+		const keysBefore = new Set(Object.keys(window.__hermesPlugins ?? {}));
+
 		// Load the bundle via blob URL
 		await this.executeBundle(bundleCode, info.id);
+
+		// Tamper protection: verify the plugin only registered under its own ID
+		const keysAfter = Object.keys(window.__hermesPlugins ?? {});
+		for (const key of keysAfter) {
+			if (!keysBefore.has(key) && key !== info.id) {
+				// Remove the rogue registration
+				delete window.__hermesPlugins![key];
+				throw new Error(
+					`Plugin "${info.id}" attempted to register under foreign ID "${key}" — rejected.`
+				);
+			}
+		}
 
 		// Retrieve the registered plugin exports
 		const pluginExports = window.__hermesPlugins?.[info.id];

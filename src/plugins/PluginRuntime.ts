@@ -1,5 +1,6 @@
 import type { PluginManifest, PluginCommandContribution, PluginPanelContribution, PluginStatusBarItem, PluginSessionActionContribution, HermesEvent } from "./types";
 import { createPluginAPI, type HermesPluginAPI, type PluginPanelProps, type PluginAPICallbacks } from "./PluginAPI";
+import { invoke } from "@tauri-apps/api/core";
 
 export type PluginActivateFn = (api: HermesPluginAPI) => void | Promise<void>;
 export type PluginDeactivateFn = () => void | Promise<void>;
@@ -63,6 +64,25 @@ export class PluginRuntime {
 		try {
 			const permissions = new Set<string>(entry.module.manifest.permissions ?? []);
 			const settingsSchema = entry.module.manifest.contributes.settings;
+
+			// Auto-grant "storage" if the plugin declares a settings schema,
+			// since settings are stored via the plugin_storage table.
+			if (settingsSchema && Object.keys(settingsSchema).length > 0) {
+				permissions.add("storage");
+			}
+
+			// Persist plugin metadata + permissions to DB for backend enforcement
+			try {
+				await invoke("save_plugin_metadata", {
+					pluginId,
+					version: entry.module.manifest.version,
+					name: entry.module.manifest.name,
+					permissions: [...permissions],
+				});
+			} catch (err) {
+				console.warn(`[PluginRuntime] Failed to save metadata for "${pluginId}":`, err);
+			}
+
 			const fullCallbacks: PluginAPICallbacks = {
 				...this.callbacks,
 				onSettingChanged: (pid: string, key: string, value: string | number | boolean) => {

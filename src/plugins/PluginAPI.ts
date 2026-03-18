@@ -196,6 +196,9 @@ export function createPluginAPI(
 		},
 		settings: {
 			async get<T = string | number | boolean>(key: string): Promise<T> {
+				if (!permissions.has("storage")) {
+					throw new PermissionDeniedError(pluginId, "storage");
+				}
 				const def = schema[key];
 				if (!def) return undefined as unknown as T;
 
@@ -213,6 +216,9 @@ export function createPluginAPI(
 				return stored as unknown as T;
 			},
 			async update(key: string, value: string | number | boolean) {
+				if (!permissions.has("storage")) {
+					throw new PermissionDeniedError(pluginId, "storage");
+				}
 				const def = schema[key];
 				if (!def) {
 					throw new Error(`Plugin "${pluginId}": unknown setting key "${key}".`);
@@ -260,6 +266,9 @@ export function createPluginAPI(
 				}
 			},
 			onDidChange(key: string, callback: (newValue: string | number | boolean) => void): Disposable {
+				if (!permissions.has("storage")) {
+					throw new PermissionDeniedError(pluginId, "storage");
+				}
 				let listeners = settingsChangeListeners.get(key);
 				if (!listeners) {
 					listeners = new Set();
@@ -276,6 +285,9 @@ export function createPluginAPI(
 				};
 			},
 			async getAll(): Promise<Record<string, string | number | boolean>> {
+				if (!permissions.has("storage")) {
+					throw new PermissionDeniedError(pluginId, "storage");
+				}
 				const result: Record<string, string | number | boolean> = {};
 				for (const [key, def] of Object.entries(schema)) {
 					const stored = await invoke<string | null>("get_plugin_setting", {
@@ -318,7 +330,7 @@ export function createPluginAPI(
 				if (!permissions.has("network")) {
 					throw new PermissionDeniedError(pluginId, "network");
 				}
-				return invoke("plugin_fetch_url", { url });
+				return invoke("plugin_fetch_url", { url, pluginId });
 			},
 		},
 		shell: {
