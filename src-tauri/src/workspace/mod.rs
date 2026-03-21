@@ -35,6 +35,7 @@ const SKIP_DIRS: &[&str] = &[
     "coverage",
     ".nyc_output",
     ".turbo",
+    "hermes-worktrees",
 ];
 
 // Security denylist — never scan these
@@ -163,6 +164,12 @@ fn detect_project_at_path(dir: &Path) -> Option<ProjectInfo> {
         if DENY_DIRS.contains(&dir_name) {
             return None;
         }
+    }
+
+    // Skip Hermes worktree directories — they are not standalone projects
+    let path_str = dir.to_string_lossy();
+    if path_str.contains("hermes-worktrees/") || path_str.contains(".hermes/worktrees/") {
+        return None;
     }
 
     // Must have .git to be considered a project root
@@ -344,4 +351,82 @@ pub fn detect_project(
 pub fn get_projects(state: State<'_, AppState>) -> Result<Vec<ProjectInfo>, String> {
     let db = state.db.lock().map_err(|e| e.to_string())?;
     db.get_all_detected_projects()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::process::Command;
+    use tempfile::TempDir;
+
+    /// Helper: create a minimal git repo so `.git` exists and `detect_project_at_path` recognises it.
+    fn init_git(dir: &Path) {
+        Command::new("git")
+            .args(["init"])
+            .current_dir(dir)
+            .output()
+            .unwrap();
+    }
+
+    // ── SKIP_DIRS contains hermes-worktrees ─────────────────────────────
+
+    #[test]
+    fn skip_dirs_includes_hermes_worktrees() {
+        assert!(
+            SKIP_DIRS.contains(&"hermes-worktrees"),
+            "SKIP_DIRS must contain 'hermes-worktrees' so worktree dirs are never scanned"
+        );
+    }
+
+    // ── detect_project_at_path rejects worktree paths ───────────────────
+
+    #[test]
+    fn detect_project_skips_hermes_worktrees_path() {
+        let tmp = TempDir::new().unwrap();
+        // Simulate: {tmp}/hermes-worktrees/{hash}/{session}_{branch}/
+        let wt = tmp
+            .path()
+            .join("hermes-worktrees")
+            .join("a1b2c3d4e5f6a7b8")
+            .join("abc12345_feature-login");
+        std::fs::create_dir_all(&wt).unwrap();
+        init_git(&wt);
+
+        assert!(
+            detect_project_at_path(&wt).is_none(),
+            "worktree inside hermes-worktrees/ must not be detected as a project"
+        );
+    }
+
+    #[test]
+    fn detect_project_skips_legacy_hermes_worktrees_path() {
+        let tmp = TempDir::new().unwrap();
+        // Simulate old format: {project}/.hermes/worktrees/{session}_{branch}/
+        let wt = tmp
+            .path()
+            .join(".hermes")
+            .join("worktrees")
+            .join("abc12345_feature-login");
+        std::fs::create_dir_all(&wt).unwrap();
+        init_git(&wt);
+
+        assert!(
+            detect_project_at_path(&wt).is_none(),
+            "worktree inside .hermes/worktrees/ must not be detected as a project"
+        );
+    }
+
+    #[test]
+    fn detect_project_allows_normal_project() {
+        let tmp = TempDir::new().unwrap();
+        let project = tmp.path().join("my-app");
+        std::fs::create_dir_all(&project).unwrap();
+        init_git(&project);
+        // Add a package.json so it gets detected with languages
+        std::fs::write(project.join("package.json"), "{}").unwrap();
+
+        let result = detect_project_at_path(&project);
+        assert!(result.is_some(), "normal project should be detected");
+        assert_eq!(result.unwrap().name, "my-app");
+    }
 }
