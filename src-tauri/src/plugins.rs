@@ -313,6 +313,7 @@ fn find_manifest_in_dir(dir: &std::path::Path) -> Result<(PathBuf, String), Stri
 #[tauri::command]
 pub async fn plugin_fetch_url(
     url: String,
+    headers: Option<std::collections::HashMap<String, String>>,
     plugin_id: String,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
@@ -325,13 +326,68 @@ pub async fn plugin_fetch_url(
             ));
         }
     }
-    let response = reqwest::get(&url)
+    let client = reqwest::Client::new();
+    let mut req = client.get(&url);
+
+    if let Some(hdrs) = headers {
+        for (k, v) in hdrs {
+            req = req.header(&k, &v);
+        }
+    }
+
+    let response = req
+        .send()
         .await
         .map_err(|e| format!("Failed to fetch URL: {}", e))?;
 
     if !response.status().is_success() {
         return Err(format!("HTTP error: {}", response.status()));
     }
+
+    response
+        .text()
+        .await
+        .map_err(|e| format!("Failed to read response: {}", e))
+}
+
+/// POST JSON to a URL and return the response body as a string.
+/// Used by plugins with the "network" permission.
+#[tauri::command]
+pub async fn plugin_post_json(
+    url: String,
+    body: String,
+    headers: Option<std::collections::HashMap<String, String>>,
+    plugin_id: String,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    {
+        let db = state.db.lock().map_err(|e| e.to_string())?;
+        if !db.has_plugin_permission(&plugin_id, "network")? {
+            return Err(format!(
+                "Plugin \"{}\" does not have \"network\" permission",
+                plugin_id
+            ));
+        }
+    }
+    let client = reqwest::Client::new();
+    let mut req = client.post(&url);
+
+    // Apply custom headers (caller controls Content-Type)
+    if let Some(hdrs) = &headers {
+        for (k, v) in hdrs {
+            req = req.header(k.as_str(), v.as_str());
+        }
+    }
+    // Default Accept to JSON if not set
+    if !headers.as_ref().map_or(false, |h| h.contains_key("Accept")) {
+        req = req.header("Accept", "application/json");
+    }
+
+    let response = req
+        .body(body)
+        .send()
+        .await
+        .map_err(|e| format!("Failed to POST: {}", e))?;
 
     response
         .text()
