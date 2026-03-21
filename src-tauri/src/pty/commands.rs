@@ -534,6 +534,7 @@ pub fn create_session(
     ai_provider: Option<String>,
     project_ids: Option<Vec<String>>,
     auto_approve: Option<bool>,
+    channels: Option<Vec<String>>,
     ssh_host: Option<String>,
     ssh_port: Option<u16>,
     ssh_user: Option<String>,
@@ -620,6 +621,7 @@ pub fn create_session(
         },
         ai_provider: ai_provider.clone(),
         auto_approve: auto_approve.unwrap_or(false),
+        channels: channels.unwrap_or_default(),
         context_injected: false,
         has_initial_context: ssh_host.is_none()
             && project_ids.as_ref().is_some_and(|ids| !ids.is_empty()),
@@ -994,14 +996,14 @@ pub fn create_session(
                             if a.pending_ai_launch {
                                 a.pending_ai_launch = false;
                                 let launch_info = session_clone.lock().ok().map(|s| {
-                                    (s.ai_provider.clone(), s.has_initial_context, s.auto_approve)
+                                    (s.ai_provider.clone(), s.has_initial_context, s.auto_approve, s.channels.clone())
                                 });
-                                if let Some((Some(ref provider), has_context, auto_approve)) =
+                                if let Some((Some(ref provider), has_context, auto_approve, ref channels)) =
                                     launch_info
                                 {
                                     // Only launch known/allowed AI providers (reject unknown values)
                                     if let Some(launch_cmd) =
-                                        ai_launch_command(provider, auto_approve)
+                                        ai_launch_command(provider, auto_approve, channels)
                                     {
                                         // For Claude/Gemini: pass context instruction as CLI argument
                                         // so it's processed immediately without PTY injection timing issues
@@ -1359,10 +1361,10 @@ pub fn create_session(
                     // Fallback auto-launch
                     if launch_info.is_some() {
                         let launch_data = session_silence.lock().ok().map(|s| {
-                            (s.ai_provider.clone(), s.has_initial_context, s.auto_approve)
+                            (s.ai_provider.clone(), s.has_initial_context, s.auto_approve, s.channels.clone())
                         });
-                        if let Some((Some(ref provider), has_context, auto_approve)) = launch_data {
-                            if let Some(launch_cmd) = ai_launch_command(provider, auto_approve) {
+                        if let Some((Some(ref provider), has_context, auto_approve, ref channels)) = launch_data {
+                            if let Some(launch_cmd) = ai_launch_command(provider, auto_approve, channels) {
                                 let supports_cli_prompt =
                                     provider == "claude" || provider == "gemini";
                                 let cmd = if has_context && supports_cli_prompt {

@@ -15,6 +15,7 @@ export function createSession(opts: {
   aiProvider: string | null;
   projectIds: string[] | null;
   autoApprove?: boolean;
+  channels?: string[] | null;
   sshHost?: string | null;
   sshPort?: number | null;
   sshUser?: string | null;

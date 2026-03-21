@@ -731,3 +731,72 @@
   font-family: var(--font-mono);
 }
 
+/* ─── Channel Selector ────────────────────────────── */
+
+.session-creator-channels {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.session-creator-channels-label {
+  font-size: var(--text-sm);
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+}
+
+.session-creator-channels-desc {
+  font-size: var(--text-xs);
+  color: var(--text-3);
+  line-height: 1.4;
+  margin-bottom: 2px;
+}
+
+.session-creator-channels-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.session-creator-channel-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  font-family: var(--font-mono);
+  font-size: var(--text-md);
+  color: var(--text-1);
+}
+
+.session-creator-channel-item:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-light);
+}
+
+.session-creator-channel-item:has(input:checked) {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+}
+
+.session-creator-channel-item input[type="checkbox"] {
+  accent-color: var(--accent);
+  flex-shrink: 0;
+}
+
+.session-creator-channel-icon {
+  font-size: var(--text-lg);
+  flex-shrink: 0;
+}
+
+.session-creator-channel-name {
+  color: var(--text-0);
+  font-weight: 500;
+}
+

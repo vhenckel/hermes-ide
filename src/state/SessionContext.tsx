@@ -966,6 +966,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         aiProvider: opts?.aiProvider || null,
         projectIds: opts?.projectIds || null,
         autoApprove: opts?.autoApprove ?? false,
+        channels: opts?.channels || null,
         sshHost: opts?.sshHost || null,
         sshPort: opts?.sshPort || null,
         sshUser: opts?.sshUser || null,

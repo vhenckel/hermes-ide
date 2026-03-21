@@ -54,6 +54,10 @@ const AI_PROVIDERS = [
   { id: "copilot", label: "Copilot", description: "GitHub Copilot CLI", enabled: true },
 ] as const;
 
+export const CLAUDE_CHANNELS = [
+  { id: "plugin:telegram@claude-plugins-official", label: "Telegram", icon: "\u{1F4F1}" },
+] as const;
+
 const AUTO_APPROVE_FLAGS: Record<string, { flag: string; description: string }> = {
   claude: { flag: "--dangerously-skip-permissions", description: "The AI agent can read, write, and execute without asking for confirmation." },
   gemini: { flag: "--yolo", description: "The AI agent can execute shell commands and write files without permission prompts." },
@@ -133,6 +137,9 @@ export function SessionCreator({ onClose, onCreate, defaultGroup }: SessionCreat
 
   // Auto-approve (skip permissions) state
   const [autoApprove, setAutoApprove] = useState(false);
+
+  // Channel plugins state (Claude only)
+  const [selectedChannels, setSelectedChannels] = useState<string[]>([]);
 
   // Branch selection state — per-project
   type BranchSelection = { branch: string; createNew: boolean };
@@ -425,6 +432,7 @@ export function SessionCreator({ onClose, onCreate, defaultGroup }: SessionCreat
         color: selectedColor,
         aiProvider: connectionType === "local" ? (aiProvider || undefined) : undefined,
         autoApprove: connectionType === "local" ? (autoApprove || undefined) : undefined,
+        channels: connectionType === "local" && aiProvider === "claude" && selectedChannels.length > 0 ? selectedChannels : undefined,
         projectIds: connectionType === "local" && selectedProjectIds.length > 0 ? selectedProjectIds : undefined,
         workingDirectory: connectionType === "local" ? firstProjectPath : undefined,
         branchSelections: connectionType === "local" && Object.keys(branchSelections).length > 0 ? branchSelections : undefined,
@@ -477,6 +485,7 @@ export function SessionCreator({ onClose, onCreate, defaultGroup }: SessionCreat
     const id = enabledProviders[idx] ?? null;
     setAiProvider(id as string | null);
     if (!id || !AUTO_APPROVE_FLAGS[id]) setAutoApprove(false);
+    if (id !== "claude") setSelectedChannels([]);
     goNext();
   };
 
@@ -1037,7 +1046,7 @@ export function SessionCreator({ onClose, onCreate, defaultGroup }: SessionCreat
                   <button
                     key={p.id}
                     className={`session-creator-provider-card ${aiProvider === p.id ? "selected" : ""} ${!p.enabled ? "disabled" : ""} ${p.enabled && highlightedProviderIndex === providerIdx ? "selected" : ""}`}
-                    onClick={() => { if (p.enabled) { setAiProvider(p.id); setHighlightedProviderIndex(providerIdx); } }}
+                    onClick={() => { if (p.enabled) { setAiProvider(p.id); setHighlightedProviderIndex(providerIdx); if (p.id !== "claude") setSelectedChannels([]); } }}
                     disabled={!p.enabled}
                   >
                     <span className="session-creator-provider-name">{p.label}</span>
@@ -1049,7 +1058,7 @@ export function SessionCreator({ onClose, onCreate, defaultGroup }: SessionCreat
               })}
               <button
                 className={`session-creator-provider-card ${aiProvider === null ? "selected" : ""} ${highlightedProviderIndex === enabledProviders.length - 1 ? "selected" : ""}`}
-                onClick={() => { setAiProvider(null); setAutoApprove(false); setHighlightedProviderIndex(enabledProviders.length - 1); }}
+                onClick={() => { setAiProvider(null); setAutoApprove(false); setSelectedChannels([]); setHighlightedProviderIndex(enabledProviders.length - 1); }}
               >
                 <span className="session-creator-provider-name">Shell Only</span>
                 <span className="session-creator-provider-desc">No AI agent</span>
@@ -1072,6 +1081,33 @@ export function SessionCreator({ onClose, onCreate, defaultGroup }: SessionCreat
                   </span>
                 </div>
               </label>
+            )}
+            {aiProvider === "claude" && (
+              <div className="session-creator-channels">
+                <div className="session-creator-channels-label">Channels</div>
+                <div className="session-creator-channels-desc">
+                  Let Claude interact with external services during this session.
+                </div>
+                <div className="session-creator-channels-list">
+                  {CLAUDE_CHANNELS.map((ch) => (
+                    <label key={ch.id} className="session-creator-channel-item">
+                      <input
+                        type="checkbox"
+                        checked={selectedChannels.includes(ch.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedChannels((prev) => [...prev, ch.id]);
+                          } else {
+                            setSelectedChannels((prev) => prev.filter((c) => c !== ch.id));
+                          }
+                        }}
+                      />
+                      <span className="session-creator-channel-icon">{ch.icon}</span>
+                      <span className="session-creator-channel-name">{ch.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
             )}
             <div className="session-creator-hints">
               <span><kbd>&uarr;&darr;</kbd><kbd>&larr;&rarr;</kbd> navigate</span>
@@ -1145,6 +1181,14 @@ export function SessionCreator({ onClose, onCreate, defaultGroup }: SessionCreat
                       )}
                     </span>
                   </div>
+                  {selectedChannels.length > 0 && (
+                    <div className="session-creator-summary-row">
+                      <span className="session-creator-summary-label">Channels</span>
+                      <span className="session-creator-summary-value">
+                        {selectedChannels.map((ch) => CLAUDE_CHANNELS.find((c) => c.id === ch)?.label || ch).join(", ")}
+                      </span>
+                    </div>
+                  )}
                 </>
               )}
             </div>

@@ -198,7 +198,7 @@ impl PtyManager {
 
 // ─── Helper Functions ───────────────────────────────────────────────
 
-pub(crate) fn ai_launch_command(provider: &str, auto_approve: bool) -> Option<String> {
+pub(crate) fn ai_launch_command(provider: &str, auto_approve: bool, channels: &[String]) -> Option<String> {
     let base = match provider {
         "claude" => "claude",
         "aider" => "aider",
@@ -207,6 +207,7 @@ pub(crate) fn ai_launch_command(provider: &str, auto_approve: bool) -> Option<St
         "copilot" => return Some("gh copilot".to_string()),
         _ => return None,
     };
+    let mut cmd = base.to_string();
     if auto_approve {
         let flag = match provider {
             "claude" => " --dangerously-skip-permissions",
@@ -215,10 +216,16 @@ pub(crate) fn ai_launch_command(provider: &str, auto_approve: bool) -> Option<St
             "gemini" => " --yolo",
             _ => "",
         };
-        Some(format!("{}{}", base, flag))
-    } else {
-        Some(base.to_string())
+        cmd.push_str(flag);
     }
+    // Append channels (Claude-only feature)
+    if provider == "claude" {
+        for ch in channels {
+            let escaped = ch.replace('\'', "'\\''");
+            cmd.push_str(&format!(" --channels '{}'", escaped));
+        }
+    }
+    Some(cmd)
 }
 
 pub(crate) fn detect_shell() -> String {
@@ -616,35 +623,78 @@ mod tests {
         use super::ai_launch_command;
 
         // Without auto-approve
-        assert_eq!(ai_launch_command("claude", false), Some("claude".into()));
-        assert_eq!(ai_launch_command("aider", false), Some("aider".into()));
-        assert_eq!(ai_launch_command("codex", false), Some("codex".into()));
-        assert_eq!(ai_launch_command("gemini", false), Some("gemini".into()));
+        assert_eq!(ai_launch_command("claude", false, &[]), Some("claude".into()));
+        assert_eq!(ai_launch_command("aider", false, &[]), Some("aider".into()));
+        assert_eq!(ai_launch_command("codex", false, &[]), Some("codex".into()));
+        assert_eq!(ai_launch_command("gemini", false, &[]), Some("gemini".into()));
         assert_eq!(
-            ai_launch_command("copilot", false),
+            ai_launch_command("copilot", false, &[]),
             Some("gh copilot".into())
         );
-        assert_eq!(ai_launch_command("unknown", false), None);
+        assert_eq!(ai_launch_command("unknown", false, &[]), None);
 
         // With auto-approve
         assert_eq!(
-            ai_launch_command("claude", true),
+            ai_launch_command("claude", true, &[]),
             Some("claude --dangerously-skip-permissions".into())
         );
-        assert_eq!(ai_launch_command("aider", true), Some("aider --yes".into()));
+        assert_eq!(ai_launch_command("aider", true, &[]), Some("aider --yes".into()));
         assert_eq!(
-            ai_launch_command("codex", true),
+            ai_launch_command("codex", true, &[]),
             Some("codex --full-auto".into())
         );
         assert_eq!(
-            ai_launch_command("gemini", true),
+            ai_launch_command("gemini", true, &[]),
             Some("gemini --yolo".into())
         );
         // copilot doesn't have auto-approve flag
         assert_eq!(
-            ai_launch_command("copilot", true),
+            ai_launch_command("copilot", true, &[]),
             Some("gh copilot".into())
         );
+    }
+
+    #[test]
+    fn test_ai_launch_command_no_channels() {
+        use super::ai_launch_command;
+        let cmd = ai_launch_command("claude", false, &[]);
+        assert_eq!(cmd, Some("claude".to_string()));
+    }
+
+    #[test]
+    fn test_ai_launch_command_with_one_channel() {
+        use super::ai_launch_command;
+        let cmd = ai_launch_command("claude", false, &["plugin:telegram@claude-plugins-official".to_string()]);
+        assert_eq!(cmd, Some("claude --channels 'plugin:telegram@claude-plugins-official'".to_string()));
+    }
+
+    #[test]
+    fn test_ai_launch_command_with_channels_and_auto_approve() {
+        use super::ai_launch_command;
+        let cmd = ai_launch_command("claude", true, &["plugin:telegram@claude-plugins-official".to_string()]);
+        assert_eq!(cmd, Some("claude --dangerously-skip-permissions --channels 'plugin:telegram@claude-plugins-official'".to_string()));
+    }
+
+    #[test]
+    fn test_ai_launch_command_multiple_channels() {
+        use super::ai_launch_command;
+        let channels = vec!["plugin:telegram@foo".to_string(), "plugin:slack@bar".to_string()];
+        let cmd = ai_launch_command("claude", false, &channels);
+        assert_eq!(cmd, Some("claude --channels 'plugin:telegram@foo' --channels 'plugin:slack@bar'".to_string()));
+    }
+
+    #[test]
+    fn test_ai_launch_command_channels_ignored_for_non_claude() {
+        use super::ai_launch_command;
+        let cmd = ai_launch_command("aider", false, &["plugin:telegram@foo".to_string()]);
+        assert_eq!(cmd, Some("aider".to_string()));
+    }
+
+    #[test]
+    fn test_ai_launch_command_channel_shell_escape() {
+        use super::ai_launch_command;
+        let cmd = ai_launch_command("claude", false, &["plugin:test'injection".to_string()]);
+        assert!(cmd.unwrap().contains("'plugin:test'\\''injection'"));
     }
 
     // ── Prompt detection after column fix ──

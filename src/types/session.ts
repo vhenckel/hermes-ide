@@ -107,6 +107,7 @@ export interface SessionData {
   metrics: SessionMetrics;
   ai_provider: string | null;
   auto_approve: boolean;
+  channels: string[];
   context_injected: boolean;
   ssh_info: SshConnectionInfo | null;
 }
@@ -158,6 +159,7 @@ export interface CreateSessionOpts {
   createNewBranch?: boolean;
   /** Per-project branch selections: projectId -> { branch, createNew } */
   branchSelections?: Record<string, { branch: string; createNew: boolean }>;
+  channels?: string[];
   sshHost?: string;
   sshPort?: number;
   sshUser?: string;
