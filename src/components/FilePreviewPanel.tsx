@@ -6,6 +6,7 @@ import { getSetting } from "../api/settings";
 import { useSession } from "../state/SessionContext";
 import { useFileEditor } from "../hooks/useFileEditor";
 import { EditorPane } from "../editor/EditorPane";
+import type { CursorInfo, IndentConfig } from "../editor/EditorPane";
 import type { FileContent } from "../types/git";
 
 import type { FileHandlerProps } from "../plugins/types";
@@ -173,6 +174,11 @@ export function FilePreviewPanel({ sessionId, projectId, filePath, onBack, fileH
   const [editorLabel, setEditorLabel] = useState(isSSH ? "Vim" : "System Default");
   const [editMode, setEditMode] = useState(false);
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
+  const [cursorInfo, setCursorInfo] = useState<CursorInfo>({ line: 1, col: 1, lineLength: 0, selected: 0, totalLines: 0 });
+  const [wordWrap, setWordWrap] = useState(false);
+  const [indentConfig, setIndentConfig] = useState<IndentConfig>({ useTabs: false, size: 2 });
+  const [showIndentMenu, setShowIndentMenu] = useState(false);
+  const indentMenuRef = useRef<HTMLDivElement>(null);
 
   const editor = useFileEditor({
     sessionId,
@@ -272,6 +278,18 @@ export function FilePreviewPanel({ sessionId, projectId, filePath, onBack, fileH
     }
   }, [file]);
 
+  // Close indent menu on click outside
+  useEffect(() => {
+    if (!showIndentMenu) return;
+    const handler = (e: MouseEvent) => {
+      if (indentMenuRef.current && !indentMenuRef.current.contains(e.target as Node)) {
+        setShowIndentMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showIndentMenu]);
+
   // Cmd+S handled by EditorPane natively; no extra keyboard shortcuts needed
 
   const handleBack = useCallback(() => {
@@ -365,14 +383,88 @@ export function FilePreviewPanel({ sessionId, projectId, filePath, onBack, fileH
           Maximum preview size is 1 MB.
         </div>
       ) : editMode ? (
-        <div className="file-preview-content file-editor-content">
-          <EditorPane
-            content={editor.content}
-            language={file.language}
-            onContentChange={editor.setContent}
-            onSave={editor.save}
-          />
-        </div>
+        <>
+          <div className="file-preview-content file-editor-content">
+            <EditorPane
+              content={editor.content}
+              language={file.language}
+              onContentChange={editor.setContent}
+              onSave={editor.save}
+              onCursorChange={setCursorInfo}
+              wordWrap={wordWrap}
+              indentConfig={indentConfig}
+            />
+          </div>
+          <div className="editor-statusbar">
+            <div className="editor-statusbar-left">
+              <span className="editor-statusbar-item" title="Cursor position">
+                Ln {cursorInfo.line}, Col {cursorInfo.col}
+              </span>
+              <span className="editor-statusbar-divider" />
+              <span className="editor-statusbar-item editor-statusbar-dim" title="Characters in current line">
+                {cursorInfo.lineLength} chars
+              </span>
+              {cursorInfo.selected > 0 && (
+                <>
+                  <span className="editor-statusbar-divider" />
+                  <span className="editor-statusbar-item editor-statusbar-accent" title="Selected characters">
+                    {cursorInfo.selected} selected
+                  </span>
+                </>
+              )}
+              <span className="editor-statusbar-divider" />
+              <span className="editor-statusbar-item editor-statusbar-dim" title="Total lines">
+                {cursorInfo.totalLines} lines
+              </span>
+            </div>
+            <div className="editor-statusbar-right">
+              <button
+                className={`editor-statusbar-btn${wordWrap ? " editor-statusbar-btn-active" : ""}`}
+                onClick={() => setWordWrap((v) => !v)}
+                title="Toggle word wrap (Alt+Z)"
+              >
+                Word Wrap
+              </button>
+              <span className="editor-statusbar-divider" />
+              <div className="editor-statusbar-indent-wrap" ref={indentMenuRef}>
+                <button
+                  className="editor-statusbar-btn"
+                  onClick={() => setShowIndentMenu((v) => !v)}
+                  title="Indentation settings"
+                >
+                  {indentConfig.useTabs ? `Tabs: ${indentConfig.size}` : `Spaces: ${indentConfig.size}`}
+                </button>
+                {showIndentMenu && (
+                  <div className="editor-indent-menu">
+                    <div className="editor-indent-menu-section">Indent Using</div>
+                    <button
+                      className={`editor-indent-menu-item${!indentConfig.useTabs ? " editor-indent-menu-item-active" : ""}`}
+                      onClick={() => { setIndentConfig((c) => ({ ...c, useTabs: false })); }}
+                    >
+                      Spaces
+                    </button>
+                    <button
+                      className={`editor-indent-menu-item${indentConfig.useTabs ? " editor-indent-menu-item-active" : ""}`}
+                      onClick={() => { setIndentConfig((c) => ({ ...c, useTabs: true })); }}
+                    >
+                      Tabs
+                    </button>
+                    <div className="editor-indent-menu-section">Tab Size</div>
+                    {[2, 4, 8].map((n) => (
+                      <button
+                        key={n}
+                        className={`editor-indent-menu-item${indentConfig.size === n ? " editor-indent-menu-item-active" : ""}`}
+                        onClick={() => { setIndentConfig((c) => ({ ...c, size: n })); setShowIndentMenu(false); }}
+                      >
+                        {n}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </>
       ) : (
         <div className="file-preview-content">
           <pre className="file-preview-code">
