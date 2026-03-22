@@ -1,6 +1,7 @@
 /* ─── File Preview Panel ───────────────────────────────────────────── */
 
 .file-preview {
+  position: relative;
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -164,6 +165,7 @@
 
 .file-editor-content {
   position: relative;
+  overflow: hidden;
 }
 
 .file-editor-code {

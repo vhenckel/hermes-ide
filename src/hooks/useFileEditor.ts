@@ -19,15 +19,7 @@ interface UseFileEditorReturn {
 	saveError: string | null;
 	save: () => Promise<boolean>;
 	lastSavedAt: number | null;
-	undo: () => void;
-	redo: () => void;
-	canUndo: boolean;
-	canRedo: boolean;
 }
-
-const MAX_HISTORY = 200;
-// Cap undo memory: allow ~20 MB total for undo stack
-const MAX_UNDO_BYTES = 20 * 1024 * 1024;
 
 export function useFileEditor(opts: UseFileEditorOptions): UseFileEditorReturn {
 	const { sessionId, projectId, filePath, initialContent, initialMtime, isSSH, autoSaveDelay = 2000 } = opts;
@@ -41,51 +33,14 @@ export function useFileEditor(opts: UseFileEditorOptions): UseFileEditorReturn {
 	const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const contentRef = useRef(content);
 
-	// Undo/redo history
-	const undoStack = useRef<string[]>([]);
-	const redoStack = useRef<string[]>([]);
-	const lastPushTime = useRef(0);
-	const [, forceUpdate] = useState(0);
-
 	const isDirty = content !== originalContent;
 
+	// Undo/redo is handled natively by CodeMirror's history() extension.
+	// This hook only tracks content for dirty state and auto-save.
 	const setContent = useCallback((value: string) => {
-		// Push to undo stack (debounce: batch rapid keystrokes within 300ms)
-		const now = Date.now();
-		if (now - lastPushTime.current > 300 || undoStack.current.length === 0) {
-			undoStack.current.push(contentRef.current);
-			// Enforce both count and memory limits
-			const maxEntries = Math.max(10, Math.min(MAX_HISTORY, Math.floor(MAX_UNDO_BYTES / Math.max(1, contentRef.current.length))));
-			while (undoStack.current.length > maxEntries) {
-				undoStack.current.shift();
-			}
-			lastPushTime.current = now;
-		}
-		// Clear redo stack on new edit
-		redoStack.current = [];
-
 		setContentState(value);
 		contentRef.current = value;
 		setSaveError(null);
-		forceUpdate((n) => n + 1);
-	}, []);
-
-	const undo = useCallback(() => {
-		if (undoStack.current.length === 0) return;
-		const prev = undoStack.current.pop()!;
-		redoStack.current.push(contentRef.current);
-		setContentState(prev);
-		contentRef.current = prev;
-		forceUpdate((n) => n + 1);
-	}, []);
-
-	const redo = useCallback(() => {
-		if (redoStack.current.length === 0) return;
-		const next = redoStack.current.pop()!;
-		undoStack.current.push(contentRef.current);
-		setContentState(next);
-		contentRef.current = next;
-		forceUpdate((n) => n + 1);
 	}, []);
 
 	// Reset state when file changes
@@ -94,8 +49,6 @@ export function useFileEditor(opts: UseFileEditorOptions): UseFileEditorReturn {
 		setOriginalContent(initialContent);
 		setMtime(initialMtime);
 		contentRef.current = initialContent;
-		undoStack.current = [];
-		redoStack.current = [];
 		setSaveError(null);
 		setLastSavedAt(null);
 	}, [filePath, initialContent, initialMtime]);
@@ -168,9 +121,5 @@ export function useFileEditor(opts: UseFileEditorOptions): UseFileEditorReturn {
 		saveError,
 		save,
 		lastSavedAt,
-		undo,
-		redo,
-		canUndo: undoStack.current.length > 0,
-		canRedo: redoStack.current.length > 0,
 	};
 }

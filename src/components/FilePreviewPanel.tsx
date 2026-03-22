@@ -5,7 +5,7 @@ import { writeToSession } from "../api/sessions";
 import { getSetting } from "../api/settings";
 import { useSession } from "../state/SessionContext";
 import { useFileEditor } from "../hooks/useFileEditor";
-import { FindReplaceBar, type FindMatch } from "./FindReplaceBar";
+import { EditorPane } from "../editor/EditorPane";
 import type { FileContent } from "../types/git";
 
 import type { FileHandlerProps } from "../plugins/types";
@@ -172,13 +172,7 @@ export function FilePreviewPanel({ sessionId, projectId, filePath, onBack, fileH
   const [loading, setLoading] = useState(true);
   const [editorLabel, setEditorLabel] = useState(isSSH ? "Vim" : "System Default");
   const [editMode, setEditMode] = useState(false);
-  const [showFindReplace, setShowFindReplace] = useState(false);
-  const [findWithReplace, setFindWithReplace] = useState(false);
-  const [findFocusTrigger, setFindFocusTrigger] = useState(0);
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
-  const [findMatches, setFindMatches] = useState<FindMatch[]>([]);
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const lineNumbersRef = useRef<HTMLDivElement | null>(null);
 
   const editor = useFileEditor({
     sessionId,
@@ -278,66 +272,7 @@ export function FilePreviewPanel({ sessionId, projectId, filePath, onBack, fileH
     }
   }, [file]);
 
-  // Keyboard shortcuts — depend on stable function refs, not the whole editor object
-  const editorSave = editor.save;
-  const editorUndo = editor.undo;
-  const editorRedo = editor.redo;
-  useEffect(() => {
-    if (!editMode) return;
-    const handler = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "s") {
-        e.preventDefault();
-        editorSave();
-      }
-      if ((e.metaKey || e.ctrlKey) && e.key === "f") {
-        e.preventDefault();
-        setShowFindReplace(true);
-        setFindWithReplace(false);
-        setFindFocusTrigger((n) => n + 1);
-      }
-      if ((e.metaKey || e.ctrlKey) && e.key === "r") {
-        e.preventDefault();
-        setShowFindReplace(true);
-        setFindWithReplace(true);
-        setFindFocusTrigger((n) => n + 1);
-      }
-      if ((e.metaKey || e.ctrlKey) && e.key === "z" && !e.shiftKey) {
-        e.preventDefault();
-        editorUndo();
-      }
-      if ((e.metaKey || e.ctrlKey) && e.key === "z" && e.shiftKey) {
-        e.preventDefault();
-        editorRedo();
-      }
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [editMode, editorSave, editorUndo, editorRedo]);
-
-  // Scroll sync: textarea ↔ line numbers
-  const handleTextareaScroll = useCallback(() => {
-    if (textareaRef.current && lineNumbersRef.current) {
-      lineNumbersRef.current.scrollTop = textareaRef.current.scrollTop;
-    }
-  }, []);
-
-  // Tab key inserts tab character
-  const editorContent = editor.content;
-  const editorSetContent = editor.setContent;
-  const handleTextareaKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Tab") {
-      e.preventDefault();
-      const ta = e.currentTarget;
-      const start = ta.selectionStart;
-      const end = ta.selectionEnd;
-      const newValue = editorContent.substring(0, start) + "\t" + editorContent.substring(end);
-      editorSetContent(newValue);
-      // Restore cursor position after React re-render
-      requestAnimationFrame(() => {
-        ta.selectionStart = ta.selectionEnd = start + 1;
-      });
-    }
-  }, [editorContent, editorSetContent]);
+  // Cmd+S handled by EditorPane natively; no extra keyboard shortcuts needed
 
   const handleBack = useCallback(() => {
     if (editor.isDirty) {
@@ -346,40 +281,6 @@ export function FilePreviewPanel({ sessionId, projectId, filePath, onBack, fileH
       onBack();
     }
   }, [editor.isDirty, onBack]);
-
-  const editorLineCount = editMode ? (editor.content.split("\n").length) : 0;
-
-  // Build highlight overlay HTML for find matches
-  const highlightOverlayHtml = useMemo(() => {
-    if (findMatches.length === 0 || !editMode) return "";
-    const text = editor.content;
-    let result = "";
-    let pos = 0;
-    for (const m of findMatches) {
-      if (m.start > pos) {
-        result += escapeHtml(text.substring(pos, m.start));
-      }
-      const cls = m.isCurrent ? "file-editor-match-current" : "file-editor-match";
-      result += `<mark class="${cls}">${escapeHtml(text.substring(m.start, m.end))}</mark>`;
-      pos = m.end;
-    }
-    if (pos < text.length) {
-      result += escapeHtml(text.substring(pos));
-    }
-    // Add trailing newline so overlay height matches textarea
-    result += "\n";
-    return result;
-  }, [findMatches, editor.content, editMode]);
-
-  // Sync highlight overlay scroll with textarea
-  const highlightRef = useRef<HTMLDivElement | null>(null);
-  const handleTextareaScrollWithHighlight = useCallback(() => {
-    handleTextareaScroll();
-    if (textareaRef.current && highlightRef.current) {
-      highlightRef.current.scrollTop = textareaRef.current.scrollTop;
-      highlightRef.current.scrollLeft = textareaRef.current.scrollLeft;
-    }
-  }, [handleTextareaScroll]);
 
   const lines = useMemo(() => {
     if (!file || !file.content) return [];
@@ -465,46 +366,12 @@ export function FilePreviewPanel({ sessionId, projectId, filePath, onBack, fileH
         </div>
       ) : editMode ? (
         <div className="file-preview-content file-editor-content">
-          {showFindReplace && (
-            <FindReplaceBar
-              content={editor.content}
-              onReplace={editor.setContent}
-              textareaRef={textareaRef}
-              onClose={() => { setShowFindReplace(false); setFindMatches([]); }}
-              focusTrigger={findFocusTrigger}
-              onMatchesChange={setFindMatches}
-              initialShowReplace={findWithReplace}
-            />
-          )}
-          <pre className="file-preview-code file-editor-code">
-            <div className="file-preview-line-numbers file-editor-line-numbers" ref={lineNumbersRef}>
-              {Array.from({ length: editorLineCount }, (_, i) => (
-                <span key={i} className="file-preview-line-number">{i + 1}</span>
-              ))}
-            </div>
-            <div className="file-editor-textarea-wrap">
-              {highlightOverlayHtml && (
-                <div
-                  ref={highlightRef}
-                  className="file-editor-highlight-overlay"
-                  dangerouslySetInnerHTML={{ __html: highlightOverlayHtml }}
-                />
-              )}
-              <textarea
-                ref={textareaRef}
-                className="file-editor-textarea"
-                value={editor.content}
-                onChange={(e) => editor.setContent(e.target.value)}
-                onScroll={handleTextareaScrollWithHighlight}
-                onKeyDown={handleTextareaKeyDown}
-                spellCheck={false}
-                autoComplete="off"
-                autoCorrect="off"
-                autoCapitalize="off"
-                wrap="off"
-              />
-            </div>
-          </pre>
+          <EditorPane
+            content={editor.content}
+            language={file.language}
+            onContentChange={editor.setContent}
+            onSave={editor.save}
+          />
         </div>
       ) : (
         <div className="file-preview-content">
@@ -537,7 +404,7 @@ export function FilePreviewPanel({ sessionId, projectId, filePath, onBack, fileH
             <div className="file-editor-confirm-actions">
               <button className="file-editor-confirm-btn" onClick={() => setShowCloseConfirm(false)}>Cancel</button>
               <button className="file-editor-confirm-btn file-editor-confirm-discard" onClick={() => { setShowCloseConfirm(false); onBack(); }}>Discard</button>
-              <button className="file-editor-confirm-btn file-editor-confirm-save" onClick={async () => { const ok = await editor.save(); if (ok) { setShowCloseConfirm(false); onBack(); } }}>Save &amp; Close</button>
+              <button className="file-editor-confirm-btn file-editor-confirm-save" onClick={async () => { const ok = await editor.save(); setShowCloseConfirm(false); if (ok) { onBack(); } }}>Save &amp; Close</button>
             </div>
           </div>
         </div>

@@ -257,6 +257,8 @@ function AppContent() {
   useEffect(() => {
     const loader = new PluginLoader(pluginRuntime);
     // Load external plugins from disk, then activate all startup plugins
+    // Expose CodeMirror core on window for language plugins
+    import("./editor/codemirrorExports").then(m => m.exposeCodeMirror());
     loader.loadAllPlugins()
       .then(() => pluginRuntime.activateStartupPlugins())
       .catch(console.error);

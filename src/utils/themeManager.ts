@@ -126,4 +126,6 @@ export function applyTheme(themeId: string, allSettings: Record<string, string>)
   applyUiScale(allSettings.ui_scale || "default", themeId);
   // Sync terminal colors
   updateSettings({ ...allSettings, theme: themeId });
+  // Notify editor to refresh syntax highlight colours
+  window.dispatchEvent(new CustomEvent("hermes:theme-changed"));
 }
