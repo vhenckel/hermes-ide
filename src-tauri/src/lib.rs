@@ -595,6 +595,7 @@ pub fn run() {
             // Git integration
             git::git_status,
             git::git_stage,
+            git::git_discard_changes,
             git::git_unstage,
             git::git_commit,
             git::git_push,

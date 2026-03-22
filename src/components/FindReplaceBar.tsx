@@ -1,24 +1,41 @@
 import "../styles/components/FindReplaceBar.css";
 import { useState, useCallback, useEffect, useRef } from "react";
 
+export interface FindMatch {
+	start: number;
+	end: number;
+	isCurrent: boolean;
+}
+
 interface FindReplaceBarProps {
 	content: string;
 	onReplace: (newContent: string) => void;
 	textareaRef: React.RefObject<HTMLTextAreaElement | null>;
 	onClose: () => void;
+	focusTrigger?: number;
+	onMatchesChange?: (matches: FindMatch[]) => void;
+	initialShowReplace?: boolean;
 }
 
-export function FindReplaceBar({ content, onReplace, textareaRef, onClose }: FindReplaceBarProps) {
+export function FindReplaceBar({ content, onReplace, textareaRef, onClose, focusTrigger, onMatchesChange, initialShowReplace }: FindReplaceBarProps) {
 	const [query, setQuery] = useState("");
 	const [replaceText, setReplaceText] = useState("");
 	const [caseSensitive, setCaseSensitive] = useState(false);
 	const [currentMatch, setCurrentMatch] = useState(0);
-	const [showReplace, setShowReplace] = useState(false);
+	const [showReplace, setShowReplace] = useState(initialShowReplace ?? false);
 	const searchRef = useRef<HTMLInputElement>(null);
+
+	// Sync replace visibility when parent changes it (Cmd+F vs Cmd+R)
+	useEffect(() => {
+		if (initialShowReplace !== undefined) {
+			setShowReplace(initialShowReplace);
+		}
+	}, [initialShowReplace, focusTrigger]);
 
 	useEffect(() => {
 		searchRef.current?.focus();
-	}, []);
+		searchRef.current?.select();
+	}, [focusTrigger]);
 
 	const getMatches = useCallback((): number[] => {
 		if (!query) return [];
@@ -42,13 +59,11 @@ export function FindReplaceBar({ content, onReplace, textareaRef, onClose }: Fin
 		if (matches.length === 0 || !textareaRef.current) return;
 		const pos = matches[index];
 		const textarea = textareaRef.current;
-		textarea.focus();
-		textarea.setSelectionRange(pos, pos + query.length);
-		// Scroll the match into view
+		// Scroll the match into view without stealing focus
 		const linesBefore = content.substring(0, pos).split("\n").length - 1;
 		const lineHeight = parseInt(getComputedStyle(textarea).lineHeight) || 18;
 		textarea.scrollTop = Math.max(0, linesBefore * lineHeight - textarea.clientHeight / 2);
-	}, [matches, query, content, textareaRef]);
+	}, [matches, content, textareaRef]);
 
 	const goNext = useCallback(() => {
 		if (matchCount === 0) return;
@@ -72,21 +87,39 @@ export function FindReplaceBar({ content, onReplace, textareaRef, onClose }: Fin
 		}
 	}, [query, caseSensitive]); // eslint-disable-line react-hooks/exhaustive-deps
 
+	// Report matches to parent for highlight overlay
+	useEffect(() => {
+		if (!onMatchesChange) return;
+		if (!query || matches.length === 0) {
+			onMatchesChange([]);
+			return;
+		}
+		onMatchesChange(
+			matches.map((pos, i) => ({
+				start: pos,
+				end: pos + query.length,
+				isCurrent: i === currentMatch,
+			}))
+		);
+	}, [matches, currentMatch, query, onMatchesChange]);
+
 	const replaceOne = useCallback(() => {
-		if (matchCount === 0) return;
+		if (matchCount === 0 || currentMatch >= matches.length) return;
 		const pos = matches[currentMatch];
 		const before = content.substring(0, pos);
 		const after = content.substring(pos + query.length);
-		onReplace(before + replaceText + after);
+		const newContent = before + replaceText + after;
+		setCurrentMatch(0);
+		onReplace(newContent);
 	}, [content, matches, currentMatch, query, replaceText, matchCount, onReplace]);
 
 	const replaceAll = useCallback(() => {
 		if (!query) return;
-		if (caseSensitive) {
-			onReplace(content.split(query).join(replaceText));
-		} else {
-			onReplace(content.replace(new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi"), replaceText));
-		}
+		const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+		const flags = caseSensitive ? "g" : "gi";
+		const newContent = content.replace(new RegExp(escaped, flags), replaceText);
+		setCurrentMatch(0);
+		onReplace(newContent);
 	}, [content, query, replaceText, caseSensitive, onReplace]);
 
 	const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -95,9 +128,11 @@ export function FindReplaceBar({ content, onReplace, textareaRef, onClose }: Fin
 		} else if (e.key === "Enter" && !e.shiftKey) {
 			e.preventDefault();
 			goNext();
+			searchRef.current?.focus();
 		} else if (e.key === "Enter" && e.shiftKey) {
 			e.preventDefault();
 			goPrev();
+			searchRef.current?.focus();
 		}
 	};
 
@@ -116,8 +151,8 @@ export function FindReplaceBar({ content, onReplace, textareaRef, onClose }: Fin
 				<span className="find-replace-count">
 					{query ? `${matchCount > 0 ? currentMatch + 1 : 0} of ${matchCount}` : ""}
 				</span>
-				<button className="find-replace-btn" onClick={goPrev} disabled={matchCount === 0} title="Previous (Shift+Enter)">&#x2191;</button>
-				<button className="find-replace-btn" onClick={goNext} disabled={matchCount === 0} title="Next (Enter)">&#x2193;</button>
+				<button className="find-replace-btn" onClick={() => { goPrev(); searchRef.current?.focus(); }} disabled={matchCount === 0} title="Previous (Shift+Enter)">&#x2191;</button>
+				<button className="find-replace-btn" onClick={() => { goNext(); searchRef.current?.focus(); }} disabled={matchCount === 0} title="Next (Enter)">&#x2193;</button>
 				<button
 					className={`find-replace-btn find-replace-toggle ${caseSensitive ? "active" : ""}`}
 					onClick={() => setCaseSensitive(!caseSensitive)}

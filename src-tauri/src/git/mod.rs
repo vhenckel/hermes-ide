@@ -634,6 +634,39 @@ pub fn git_unstage(
 }
 
 #[tauri::command]
+pub fn git_discard_changes(
+    state: State<'_, AppState>,
+    session_id: String,
+    project_id: String,
+    paths: Vec<String>,
+) -> Result<GitOperationResult, String> {
+    let db = state
+        .db
+        .lock()
+        .map_err(|e| format!("DB lock error: {}", e))?;
+    let project_path = resolve_worktree_path(&db, &session_id, &project_id)?;
+    drop(db);
+    let repo = Repository::open(&project_path).map_err(|e| e.to_string())?;
+
+    let mut checkout_builder = git2::build::CheckoutBuilder::new();
+    checkout_builder.force();
+
+    for path in &paths {
+        safe_join(&project_path, path)?;
+        checkout_builder.path(path.as_str());
+    }
+
+    repo.checkout_head(Some(&mut checkout_builder))
+        .map_err(|e| format!("Failed to discard changes: {}", e))?;
+
+    Ok(GitOperationResult {
+        success: true,
+        message: format!("Discarded changes in {} file(s)", paths.len()),
+        error: None,
+    })
+}
+
+#[tauri::command]
 pub fn git_commit(
     state: State<'_, AppState>,
     session_id: String,

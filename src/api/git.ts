@@ -21,6 +21,10 @@ export function gitUnstage(sessionId: string, projectId: string, paths: string[]
   return invoke<GitOperationResult>("git_unstage", { sessionId, projectId, paths });
 }
 
+export function gitDiscardChanges(sessionId: string, projectId: string, paths: string[]): Promise<GitOperationResult> {
+  return invoke<GitOperationResult>("git_discard_changes", { sessionId, projectId, paths });
+}
+
 export function gitCommit(
   sessionId: string,
   projectId: string,

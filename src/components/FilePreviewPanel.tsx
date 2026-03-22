@@ -5,7 +5,7 @@ import { writeToSession } from "../api/sessions";
 import { getSetting } from "../api/settings";
 import { useSession } from "../state/SessionContext";
 import { useFileEditor } from "../hooks/useFileEditor";
-import { FindReplaceBar } from "./FindReplaceBar";
+import { FindReplaceBar, type FindMatch } from "./FindReplaceBar";
 import type { FileContent } from "../types/git";
 
 import type { FileHandlerProps } from "../plugins/types";
@@ -168,7 +168,10 @@ export function FilePreviewPanel({ sessionId, projectId, filePath, onBack, fileH
   const [editorLabel, setEditorLabel] = useState(isSSH ? "Vim" : "System Default");
   const [editMode, setEditMode] = useState(false);
   const [showFindReplace, setShowFindReplace] = useState(false);
+  const [findWithReplace, setFindWithReplace] = useState(false);
+  const [findFocusTrigger, setFindFocusTrigger] = useState(0);
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
+  const [findMatches, setFindMatches] = useState<FindMatch[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const lineNumbersRef = useRef<HTMLDivElement | null>(null);
 
@@ -182,6 +185,21 @@ export function FilePreviewPanel({ sessionId, projectId, filePath, onBack, fileH
       .then(setFile)
       .catch((e) => setError(String(e)))
       .finally(() => setLoading(false));
+  }, [sessionId, projectId, filePath, isSSH]);
+
+  // Reload file when it changes on disk (e.g., git discard)
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { projectId: string; filePath: string };
+      if (detail.projectId === projectId && detail.filePath === filePath) {
+        const promise = isSSH
+          ? sshReadFile(sessionId, filePath).then((r) => ({ ...r, mtime: 0 }))
+          : readFileContent(sessionId, projectId, filePath);
+        promise.then(setFile).catch(console.error);
+      }
+    };
+    window.addEventListener("hermes:file-changed-on-disk", handler);
+    return () => window.removeEventListener("hermes:file-changed-on-disk", handler);
   }, [sessionId, projectId, filePath, isSSH]);
 
   useEffect(() => {
@@ -260,6 +278,22 @@ export function FilePreviewPanel({ sessionId, projectId, filePath, onBack, fileH
       if ((e.metaKey || e.ctrlKey) && e.key === "f") {
         e.preventDefault();
         setShowFindReplace(true);
+        setFindWithReplace(false);
+        setFindFocusTrigger((n) => n + 1);
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === "r") {
+        e.preventDefault();
+        setShowFindReplace(true);
+        setFindWithReplace(true);
+        setFindFocusTrigger((n) => n + 1);
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === "z" && !e.shiftKey) {
+        e.preventDefault();
+        editor.undo();
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === "z" && e.shiftKey) {
+        e.preventDefault();
+        editor.redo();
       }
     };
     window.addEventListener("keydown", handler);
@@ -298,6 +332,38 @@ export function FilePreviewPanel({ sessionId, projectId, filePath, onBack, fileH
   }, [editor.isDirty, onBack]);
 
   const editorLineCount = editMode ? (editor.content.split("\n").length) : 0;
+
+  // Build highlight overlay HTML for find matches
+  const highlightOverlayHtml = useMemo(() => {
+    if (findMatches.length === 0 || !editMode) return "";
+    const text = editor.content;
+    let result = "";
+    let pos = 0;
+    for (const m of findMatches) {
+      if (m.start > pos) {
+        result += escapeHtml(text.substring(pos, m.start));
+      }
+      const cls = m.isCurrent ? "file-editor-match-current" : "file-editor-match";
+      result += `<mark class="${cls}">${escapeHtml(text.substring(m.start, m.end))}</mark>`;
+      pos = m.end;
+    }
+    if (pos < text.length) {
+      result += escapeHtml(text.substring(pos));
+    }
+    // Add trailing newline so overlay height matches textarea
+    result += "\n";
+    return result;
+  }, [findMatches, editor.content, editMode]);
+
+  // Sync highlight overlay scroll with textarea
+  const highlightRef = useRef<HTMLDivElement | null>(null);
+  const handleTextareaScrollWithHighlight = useCallback(() => {
+    handleTextareaScroll();
+    if (textareaRef.current && highlightRef.current) {
+      highlightRef.current.scrollTop = textareaRef.current.scrollTop;
+      highlightRef.current.scrollLeft = textareaRef.current.scrollLeft;
+    }
+  }, [handleTextareaScroll]);
 
   const lines = useMemo(() => {
     if (!file || !file.content) return [];
@@ -388,7 +454,10 @@ export function FilePreviewPanel({ sessionId, projectId, filePath, onBack, fileH
               content={editor.content}
               onReplace={editor.setContent}
               textareaRef={textareaRef}
-              onClose={() => setShowFindReplace(false)}
+              onClose={() => { setShowFindReplace(false); setFindMatches([]); }}
+              focusTrigger={findFocusTrigger}
+              onMatchesChange={setFindMatches}
+              initialShowReplace={findWithReplace}
             />
           )}
           <pre className="file-preview-code file-editor-code">
@@ -397,19 +466,28 @@ export function FilePreviewPanel({ sessionId, projectId, filePath, onBack, fileH
                 <span key={i} className="file-preview-line-number">{i + 1}</span>
               ))}
             </div>
-            <textarea
-              ref={textareaRef}
-              className="file-editor-textarea"
-              value={editor.content}
-              onChange={(e) => editor.setContent(e.target.value)}
-              onScroll={handleTextareaScroll}
-              onKeyDown={handleTextareaKeyDown}
-              spellCheck={false}
-              autoComplete="off"
-              autoCorrect="off"
-              autoCapitalize="off"
-              wrap="off"
-            />
+            <div className="file-editor-textarea-wrap">
+              {highlightOverlayHtml && (
+                <div
+                  ref={highlightRef}
+                  className="file-editor-highlight-overlay"
+                  dangerouslySetInnerHTML={{ __html: highlightOverlayHtml }}
+                />
+              )}
+              <textarea
+                ref={textareaRef}
+                className="file-editor-textarea"
+                value={editor.content}
+                onChange={(e) => editor.setContent(e.target.value)}
+                onScroll={handleTextareaScrollWithHighlight}
+                onKeyDown={handleTextareaKeyDown}
+                spellCheck={false}
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+                wrap="off"
+              />
+            </div>
           </pre>
         </div>
       ) : (

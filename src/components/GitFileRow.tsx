@@ -1,10 +1,11 @@
-import { memo } from "react";
+import { memo, useState } from "react";
 import type { GitFile } from "../types/git";
 
 interface GitFileRowProps {
   file: GitFile;
   onStage?: (path: string) => void;
   onUnstage?: (path: string) => void;
+  onDiscard?: (path: string) => void;
   onOpen?: (path: string) => void;
   onClick?: (file: GitFile) => void;
   onContextMenu?: (e: React.MouseEvent, file: GitFile) => void;
@@ -24,11 +25,13 @@ export const GitFileRow = memo(function GitFileRow({
   file,
   onStage,
   onUnstage,
+  onDiscard,
   onOpen,
   onClick,
   onContextMenu,
 }: GitFileRowProps) {
   const info = STATUS_LABELS[file.status] || { letter: "?", className: "git-status-untracked" };
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
 
   return (
     <div className="git-file-row" onClick={() => onClick?.(file)} onContextMenu={(e) => { if (onContextMenu) { e.preventDefault(); e.stopPropagation(); onContextMenu(e, file); } }}>
@@ -54,6 +57,34 @@ export const GitFileRow = memo(function GitFileRow({
           >
             Unstage
           </button>
+        )}
+        {file.area === "unstaged" && file.status !== "untracked" && onDiscard && (
+          confirmDiscard ? (
+            <>
+              <button
+                className="git-file-btn git-file-btn-discard-confirm"
+                title="Confirm discard"
+                onClick={(e) => { e.stopPropagation(); onDiscard(file.path); setConfirmDiscard(false); }}
+              >
+                Confirm
+              </button>
+              <button
+                className="git-file-btn git-file-btn-open"
+                title="Cancel"
+                onClick={(e) => { e.stopPropagation(); setConfirmDiscard(false); }}
+              >
+                Cancel
+              </button>
+            </>
+          ) : (
+            <button
+              className="git-file-btn git-file-btn-discard"
+              title="Discard changes (restore to last commit)"
+              onClick={(e) => { e.stopPropagation(); setConfirmDiscard(true); }}
+            >
+              Discard
+            </button>
+          )
         )}
         {(file.area === "unstaged" || file.area === "untracked") && onStage && (
           <button

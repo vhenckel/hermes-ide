@@ -306,6 +306,10 @@
 .git-file-btn-stage:hover { color: var(--green); border-color: var(--green); }
 .git-file-btn-unstage:hover { color: var(--yellow); border-color: var(--yellow); }
 .git-file-btn-open:hover { color: var(--accent); border-color: var(--accent); }
+.git-file-btn-discard { color: var(--text-3); }
+.git-file-btn-discard:hover { color: var(--red); border-color: var(--red); }
+.git-file-btn-discard-confirm { color: var(--red); border-color: var(--red); }
+.git-file-btn-discard-confirm:hover { background: var(--red-dim); }
 
 /* ─── Commit Area ──────────────────────────────────────────────────── */
 
