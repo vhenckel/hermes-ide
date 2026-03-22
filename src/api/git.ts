@@ -21,6 +21,10 @@ export function gitUnstage(sessionId: string, projectId: string, paths: string[]
   return invoke<GitOperationResult>("git_unstage", { sessionId, projectId, paths });
 }
 
+export function gitDiscardChanges(sessionId: string, projectId: string, paths: string[]): Promise<GitOperationResult> {
+  return invoke<GitOperationResult>("git_discard_changes", { sessionId, projectId, paths });
+}
+
 export function gitCommit(
   sessionId: string,
   projectId: string,
@@ -87,6 +91,10 @@ export function readFileContent(sessionId: string, projectId: string, filePath: 
   return invoke<FileContent>("read_file_content", { sessionId, projectId, filePath });
 }
 
+export function writeFileContent(sessionId: string, projectId: string, filePath: string, content: string): Promise<number> {
+  return invoke<number>("write_file_content", { sessionId, projectId, filePath, content });
+}
+
 export function openFileInEditor(sessionId: string, projectId: string, filePath: string, editor: string | null): Promise<void> {
   return invoke("open_file_in_editor", { sessionId, projectId, filePath, editor });
 }
@@ -99,6 +107,10 @@ export function sshListDirectory(sessionId: string, path?: string): Promise<SshF
 
 export function sshReadFile(sessionId: string, filePath: string): Promise<SshFileContent> {
   return invoke<SshFileContent>("ssh_read_file", { sessionId, filePath });
+}
+
+export function sshWriteFile(sessionId: string, filePath: string, content: string): Promise<void> {
+  return invoke("ssh_write_file", { sessionId, filePath, content });
 }
 
 // ─── Stash API ───────────────────────────────────────────────────────

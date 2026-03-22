@@ -3,7 +3,7 @@ import { useTextContextMenu } from "../hooks/useTextContextMenu";
 import { useContextMenu, buildEmptyAreaMenuItems } from "../hooks/useContextMenu";
 import type { GitProjectStatus, GitFile, MergeStatus, ConflictStrategy } from "../types/git";
 import {
-  gitStage, gitUnstage, gitCommit, gitPush, gitPull, gitOpenFile,
+  gitStage, gitUnstage, gitDiscardChanges, gitCommit, gitPush, gitPull, gitOpenFile,
   gitMergeStatus, gitResolveConflict, gitAbortMerge, gitContinueMerge,
 } from "../api/git";
 import { getSettings } from "../api/settings";
@@ -134,6 +134,16 @@ export function GitProjectSection({ sessionId, projectId, project, onRefresh, on
     try {
       await gitUnstage(sessionId, projectId, [path]);
       onRefresh();
+    } catch (e) { setError(String(e)); }
+  }, [sessionId, projectId, onRefresh]);
+
+  const handleDiscard = useCallback(async (path: string) => {
+    setError(null);
+    try {
+      await gitDiscardChanges(sessionId, projectId, [path]);
+      onRefresh();
+      // Notify file editor to reload if this file is open
+      window.dispatchEvent(new CustomEvent("hermes:file-changed-on-disk", { detail: { projectId, filePath: path } }));
     } catch (e) { setError(String(e)); }
   }, [sessionId, projectId, onRefresh]);
 
@@ -399,6 +409,7 @@ export function GitProjectSection({ sessionId, projectId, project, onRefresh, on
                       key={`unstaged-${f.path}`}
                       file={f}
                       onStage={handleStage}
+                      onDiscard={handleDiscard}
                       onOpen={handleOpen}
                       onClick={handleFileClick}
                     />
