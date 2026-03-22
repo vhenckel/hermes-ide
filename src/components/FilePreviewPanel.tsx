@@ -176,6 +176,7 @@ export function FilePreviewPanel({ sessionId, projectId, filePath, onBack, fileH
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
   const [cursorInfo, setCursorInfo] = useState<CursorInfo>({ line: 1, col: 1, lineLength: 0, selected: 0, totalLines: 0 });
   const [wordWrap, setWordWrap] = useState(false);
+  const [showMinimap, setShowMinimap] = useState(false);
   const [indentConfig, setIndentConfig] = useState<IndentConfig>({ useTabs: false, size: 2 });
   const [showIndentMenu, setShowIndentMenu] = useState(false);
   const indentMenuRef = useRef<HTMLDivElement>(null);
@@ -393,6 +394,7 @@ export function FilePreviewPanel({ sessionId, projectId, filePath, onBack, fileH
               onCursorChange={setCursorInfo}
               wordWrap={wordWrap}
               indentConfig={indentConfig}
+              minimap={showMinimap}
             />
           </div>
           <div className="editor-statusbar">
@@ -418,6 +420,14 @@ export function FilePreviewPanel({ sessionId, projectId, filePath, onBack, fileH
               </span>
             </div>
             <div className="editor-statusbar-right">
+              <button
+                className={`editor-statusbar-btn${showMinimap ? " editor-statusbar-btn-active" : ""}`}
+                onClick={() => setShowMinimap((v) => !v)}
+                title="Toggle minimap"
+              >
+                Minimap
+              </button>
+              <span className="editor-statusbar-divider" />
               <button
                 className={`editor-statusbar-btn${wordWrap ? " editor-statusbar-btn-active" : ""}`}
                 onClick={() => setWordWrap((v) => !v)}

@@ -1,5 +1,5 @@
 import "../styles/components/EditorPane.css";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { EditorState, Compartment, Transaction } from "@codemirror/state";
 import { EditorView, keymap, lineNumbers, highlightActiveLineGutter, highlightSpecialChars, dropCursor, highlightActiveLine } from "@codemirror/view";
 import {
@@ -16,6 +16,7 @@ import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
 import { search, searchKeymap, openSearchPanel, gotoLine, selectNextOccurrence } from "@codemirror/search";
 import { getLanguageSupport } from "./languageRegistry";
 import { createSyntaxHighlighting } from "./editorTheme";
+import { Minimap } from "./Minimap";
 
 export interface CursorInfo {
   line: number;
@@ -38,10 +39,11 @@ interface EditorPaneProps {
   onCursorChange?: (info: CursorInfo) => void;
   wordWrap?: boolean;
   indentConfig?: IndentConfig;
+  minimap?: boolean;
 }
 
 const baseTheme = EditorView.theme({
-  ".cm-editor": {
+  "&": {
     height: "100%",
     background: "transparent",
   },
@@ -198,12 +200,14 @@ function buildIndentExtensions(config: IndentConfig) {
   ];
 }
 
-export function EditorPane({ content, language, onContentChange, onSave, onCursorChange, wordWrap, indentConfig }: EditorPaneProps) {
+export function EditorPane({ content, language, onContentChange, onSave, onCursorChange, wordWrap, indentConfig, minimap }: EditorPaneProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
+  const [editorView, setEditorView] = useState<EditorView | null>(null);
   const onContentChangeRef = useRef(onContentChange);
   const onSaveRef = useRef(onSave);
   const onCursorChangeRef = useRef(onCursorChange);
+  const minimapNotifyRef = useRef<(() => void) | null>(null);
   const languageCompartment = useRef(new Compartment());
   const themeCompartment = useRef(new Compartment());
   const wrapCompartment = useRef(new Compartment());
@@ -318,6 +322,9 @@ export function EditorPane({ content, language, onContentChange, onSave, onCurso
               totalLines: state.doc.lines,
             });
           }
+          if (update.docChanged || update.geometryChanged || update.viewportChanged) {
+            minimapNotifyRef.current?.();
+          }
         }),
       ],
     });
@@ -328,6 +335,7 @@ export function EditorPane({ content, language, onContentChange, onSave, onCurso
     });
 
     viewRef.current = view;
+    setEditorView(view);
 
     // Auto-focus the editor so keyboard shortcuts work immediately
     requestAnimationFrame(() => view.focus());
@@ -335,6 +343,7 @@ export function EditorPane({ content, language, onContentChange, onSave, onCurso
     return () => {
       view.destroy();
       viewRef.current = null;
+      setEditorView(null);
     };
     // Only run on mount/unmount — content and language changes are handled by
     // dedicated effects below.
@@ -406,5 +415,16 @@ export function EditorPane({ content, language, onContentChange, onSave, onCurso
     return () => window.removeEventListener("hermes:theme-changed", handler);
   }, []);
 
-  return <div ref={containerRef} className="cm-editor-container" />;
+  const showMinimap = minimap && editorView;
+
+  return (
+    <div className="cm-editor-container">
+      <div
+        ref={containerRef}
+        className="cm-editor-inner"
+        style={showMinimap ? { right: 60 } : undefined}
+      />
+      {showMinimap && <Minimap view={editorView} notifyRef={minimapNotifyRef} />}
+    </div>
+  );
 }
