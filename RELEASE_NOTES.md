@@ -1,17 +1,16 @@
-# v0.6.2
+# v0.6.3
 
 ## New
 
-- **Jump to line number** — Press Cmd+G to quickly navigate to any line in the editor
-- **Word wrap toggle** — Toggle soft word wrap on and off from the editor status bar
-- **Indentation settings** — Switch between tabs and spaces and choose tab size (2, 4, or 8) from the editor status bar
-- **Cursor position indicator** — The editor now shows your current line, column, line character count, selection length, and total lines in a status bar at the bottom
+- **Create sessions from remote branches** — The branch picker now shows both local and remote branches in a single unified list. You can create a session directly from a remote branch without manually checking it out first. A "Fetch" button lets you refresh the list on demand.
+- **Editor minimap** — A code overview sidebar is now available in the editor, giving you a bird's-eye view of your file.
 
 ## Improved
 
-- **Standard keyboard shortcuts** — The editor now supports toggle comment (Cmd+/), block comment (Cmd+Shift+/), move line up/down (Alt+Up/Down), duplicate line (Shift+Alt+Up/Down), delete line (Cmd+Shift+K), select next occurrence (Cmd+D), insert line above/below (Cmd+Enter / Cmd+Shift+Enter), and jump to matching bracket (Cmd+Shift+\)
-- **Search and replace panel now matches your theme** — The find/replace bar previously appeared with default unstyled colors; it now respects all 29 themes
-- **Text selection is now clearly visible** — Selection highlighting was previously too faint to see on most themes
-- **Tab key works correctly** — Pressing Tab now inserts indentation at the cursor instead of re-indenting the entire line
-- **Editor scrollbars are thinner and less intrusive** — Scrollbars in the code editor are now slim and blend with the theme
-- **Editor auto-focuses when opened** — Keyboard shortcuts now work immediately without needing to click into the editor first
+- **Cleaner branch selection UI** — The branch picker has been simplified with less visual clutter, tighter rows, and commit messages shown on hover instead of inline.
+- **Better worktree reliability** — The app now detects when a working directory is deleted externally and notifies you immediately. Stale worktree records are cleaned up automatically on startup, and you'll be notified if cleanup fails during session close.
+- **New app icon** — Updated to the new circuit-H design across all platforms.
+
+## Fixed
+
+- Long tool names no longer overflow in the context panel.
